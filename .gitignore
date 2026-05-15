@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+bridge/bridge
+bridge/bridge.exe
+.claude/settings.local.json

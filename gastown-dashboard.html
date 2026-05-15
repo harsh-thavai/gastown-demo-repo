@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⛽ GAS TOWN — Multi-Agent Orchestration</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060a0e;--surface:#0b1018;--surface2:#101720;--surface3:#141e28;
+  --border:#1a2838;--border2:#223044;
+  --mayor:#f0a500;--mayor-dim:#6b4800;--mayor-bg:#0d0a00;
+  --green:#00e5a0;--green-dim:#004d36;--green-bg:#001a12;
+  --blue:#38bdf8;--blue-dim:#003d5c;--blue-bg:#001828;
+  --purple:#a78bfa;--purple-dim:#3d2a70;--purple-bg:#140d28;
+  --orange:#fb923c;--orange-dim:#5a2e0a;--orange-bg:#180e04;
+  --red:#f87171;--red-dim:#5c1515;--red-bg:#180505;
+  --teal:#22d3ee;--teal-dim:#003d4a;--teal-bg:#001820;
+  --vercel:#fff;--vercel-bg:#0a0a0a;
+  --text:#d8e8f8;--text2:#5a7490;--text3:#2e4055;
+  --font:'JetBrains Mono',monospace;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;height:100%;overflow:hidden}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 18px;height:46px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.wordmark{font-size:15px;font-weight:700;color:var(--mayor);letter-spacing:.14em}
+.pill{padding:3px 10px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.06em}
+.pill-convoy{background:#12082e;border:1px solid #3d1a80;color:var(--purple)}
+.pill-gstack{background:#0a1200;border:1px solid #2e4400;color:#8fbe00;font-size:9px}
+.vercel-live{display:none;align-items:center;gap:7px;background:#000;border:1px solid #333;border-radius:4px;padding:3px 10px;font-size:10px;font-weight:700;color:#fff;letter-spacing:.07em;text-decoration:none}
+.vercel-live.show{display:flex}
+.vercel-live-dot{width:6px;height:6px;border-radius:50%;background:#00e5a0;animation:pg 1.4s ease-in-out infinite}
+.counter{color:var(--text2);font-size:11px}.counter b{color:var(--green)}
+.spacer{flex:1}
+.live{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--green)}
+.live::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--green);animation:pg 1.4s ease-in-out infinite}
+.deploy-btn{background:var(--green-bg);border:1px solid var(--green);color:var(--green);padding:6px 14px;border-radius:4px;font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:all .15s}
+.deploy-btn:hover{background:#003d2a}
+.deploy-btn.running{border-color:var(--orange);color:var(--orange);background:var(--orange-bg)}
+
+/* LAYOUT */
+.shell{display:flex;flex-direction:column;height:100vh}
+.panels{display:grid;grid-template-columns:225px 1fr 270px;flex:1;overflow:hidden}
+.panel{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.panel:last-child{border-right:none}
+.ph{padding:9px 13px;border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.15em;text-transform:uppercase;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.ph-dot{width:4px;height:4px;border-radius:50%;background:var(--text3)}
+.pb{flex:1;overflow-y:auto;padding:10px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.pb::-webkit-scrollbar{width:3px}
+.pb::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* AGENT CARDS */
+.ac{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:9px 11px;margin-bottom:7px}
+.ac.mayor-card{border-color:var(--mayor-dim);background:var(--mayor-bg)}
+.ac.working{border-color:var(--green-dim)}
+.ac.done{border-color:#1a4030;opacity:.7}
+.ac.stuck{border-color:var(--red-dim);background:var(--red-bg)}
+.ac.deploying{border-color:#333;background:#050505;animation:vp 2s ease-in-out infinite}
+.ac-top{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.sd{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sd.s-working{background:var(--green);animation:pg 1.4s ease-in-out infinite}
+.sd.s-idle{background:var(--text3)}
+.sd.s-mayor{background:var(--mayor);animation:pm 1.8s ease-in-out infinite}
+.sd.s-done{background:#1d7a55}
+.sd.s-stuck{background:var(--red);animation:pr 1s ease-in-out infinite}
+.sd.s-vercel{background:#fff;animation:vdot 1.5s ease-in-out infinite}
+.an{font-size:11px;font-weight:600;letter-spacing:.03em}
+.ar{font-size:9px;color:var(--text2);letter-spacing:.06em;padding-left:14px;margin-bottom:3px;display:flex;align-items:center;gap:5px}
+.at{font-size:10px;color:var(--text2);padding-left:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.pb-badge{margin-left:auto;font-size:9px;font-weight:700;letter-spacing:.09em;padding:2px 6px;border-radius:3px}
+.pb-high{background:#1f0505;color:var(--red);border:1px solid var(--red-dim)}
+.pb-med{background:#1a0e00;color:var(--orange);border:1px solid var(--orange-dim)}
+.pb-low{background:var(--green-bg);color:var(--green);border:1px solid var(--green-dim)}
+.override-row{display:flex;gap:5px;padding-left:14px}
+.ov-btn{background:var(--surface3);border:1px solid var(--border2);color:var(--text3);font-family:var(--font);font-size:9px;padding:3px 8px;border-radius:3px;cursor:pointer;letter-spacing:.04em;transition:all .15s}
+.ov-btn:hover{color:var(--mayor);border-color:var(--mayor-dim)}
+.ov-btn.done-btn:hover{color:var(--green);border-color:var(--green-dim)}
+.ov-btn.stuck-btn:hover{color:var(--red);border-color:var(--red-dim)}
+.connector{width:1px;height:7px;background:var(--border2);margin:0 0 0 14px}
+.gs-tag{font-size:8px;color:#8fbe00;background:#0a1200;border:1px solid #2a4000;padding:1px 5px;border-radius:2px;letter-spacing:.04em}
+.vc-tag{font-size:8px;color:#fff;background:#000;border:1px solid #444;padding:1px 5px;border-radius:2px;letter-spacing:.04em}
+
+/* THOUGHT STREAM */
+.ts-sec{margin-bottom:14px}
+.ts-lbl{font-size:9px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px}
+.mayor-log{background:var(--mayor-bg);border:1px solid var(--mayor-dim);border-radius:4px;padding:10px 12px;font-size:11px;line-height:1.8;font-family:var(--font)}
+.mk{color:var(--mayor);font-weight:600}.mv{color:#c8a84a}.ms{color:#86efac}
+.ml-cursor{display:inline-block;width:7px;height:12px;background:var(--mayor);margin-left:2px;vertical-align:middle;animation:bk 1.1s step-end infinite}
+.thought{background:var(--surface2);border-left:2px solid var(--green);padding:8px 11px;margin-bottom:7px;border-radius:0 4px 4px 0}
+.thought.auth{border-color:var(--green)}.thought.tests{border-color:var(--blue)}
+.thought.debug{border-color:var(--red)}.thought.docs{border-color:var(--purple)}.thought.review{border-color:var(--orange)}
+.thought.deploy{border-color:#555;background:#060606}
+.ta{font-size:9px;font-weight:700;letter-spacing:.07em;margin-bottom:5px}
+.ta.auth{color:var(--green)}.ta.tests{color:var(--blue)}.ta.debug{color:var(--red)}.ta.docs{color:var(--purple)}.ta.review{color:var(--orange)}.ta.deploy{color:#aaa}
+.tc{font-size:10px;color:var(--text2);line-height:1.85}
+.cur{display:inline-block;width:6px;height:11px;margin-left:2px;vertical-align:middle;animation:bk 1.1s step-end infinite}
+.cur.g{background:var(--green)}.cur.b{background:var(--blue)}.cur.r{background:var(--red)}.cur.w{background:#fff}
+.kw{color:#7dd3fc}.fn{color:#a5f3fc}.st{color:#86efac}.cm{color:var(--text3);font-style:italic}.er{color:var(--red)}
+.typing .l{animation:fi .35s ease-out both}
+.typing .l:nth-child(1){animation-delay:.1s}.typing .l:nth-child(2){animation-delay:.65s}
+.typing .l:nth-child(3){animation-delay:1.3s}.typing .l:nth-child(4){animation-delay:2s}
+.typing .l:nth-child(5){animation-delay:2.7s}.typing .l:nth-child(6){animation-delay:3.3s}
+
+/* VERCEL DEPLOY PANEL — shown in thought stream when deploying */
+.vercel-deploy-block{background:#050505;border:1px solid #2a2a2a;border-radius:5px;padding:11px 13px;margin-bottom:7px;display:none}
+.vercel-deploy-block.show{display:block}
+.vd-header{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.vd-logo{font-size:13px;font-weight:700;color:#fff;letter-spacing:.05em}
+.vd-status{font-size:9px;padding:2px 7px;border-radius:3px;font-weight:700;letter-spacing:.07em}
+.vd-status.building{background:#1a1000;color:var(--orange);border:1px solid var(--orange-dim)}
+.vd-status.ready{background:#001a12;color:var(--green);border:1px solid var(--green-dim)}
+.vd-row{display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px}
+.vd-key{color:var(--text3)}.vd-val{color:var(--text2)}
+.vd-url{color:var(--teal);text-decoration:none;font-size:10px;word-break:break-all}
+.vd-url:hover{color:#fff}
+.vd-build-log{background:#000;border:1px solid #1a1a1a;border-radius:3px;padding:7px 9px;margin-top:8px;font-size:10px;line-height:1.75;color:#666}
+.vd-build-log .vl{animation:fi .3s ease-out both}
+.vd-build-log .vl:nth-child(1){animation-delay:.1s}.vd-build-log .vl:nth-child(2){animation-delay:.7s}
+.vd-build-log .vl:nth-child(3){animation-delay:1.5s}.vd-build-log .vl:nth-child(4){animation-delay:2.3s}
+.vd-build-log .vl:nth-child(5){animation-delay:3s}
+
+/* EVENT FEED */
+.ev{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:6px;animation:si .25s ease-out}
+.ev-top{display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.ev-time{font-size:9px;color:var(--text3);min-width:50px}
+.ap{font-size:8px;font-weight:700;letter-spacing:.07em;padding:2px 6px;border-radius:3px}
+.eb{font-size:8px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:3px;margin-left:auto}
+.ev-desc{font-size:10px;color:var(--text2);line-height:1.55}
+.ev-link{color:var(--teal);text-decoration:none;font-size:10px}.ev-link:hover{color:#fff}
+.b-sp{background:var(--green-bg);color:var(--green);border:1px solid var(--green-dim)}
+.b-st{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-dim)}
+.b-cw{background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-dim)}
+.b-rp{background:var(--green-bg);color:#00e5a0;border:1px solid var(--green-dim)}
+.b-rf{background:var(--red-bg);color:var(--red);border:1px solid var(--red-dim)}
+.b-pr{background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-dim)}
+.b-mg{background:var(--mayor-bg);color:var(--mayor);border:1px solid var(--mayor-dim)}
+.b-cs{background:#1a0a00;color:var(--orange);border:1px solid var(--orange-dim)}
+.b-gs{background:#0a1200;color:#8fbe00;border:1px solid #2a4000}
+.b-mo{background:#1a1000;color:#e8c000;border:1px solid #5a4000}
+.b-vb{background:#111;color:#aaa;border:1px solid #333}
+.b-vr{background:#050505;color:#fff;border:1px solid #444}
+
+/* NOTES */
+.notes-wrap{border-top:1px solid var(--border);padding:10px 11px;background:var(--surface);flex-shrink:0}
+.notes-lbl{font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+.notes-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-family:var(--font);font-size:11px;padding:8px 10px;resize:none;outline:none;line-height:1.6;transition:border-color .2s}
+.notes-input:focus{border-color:var(--green)}
+.notes-input::placeholder{color:var(--text3)}
+
+@keyframes pg{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,229,160,.45)}50%{opacity:.65;box-shadow:0 0 0 5px rgba(0,229,160,0)}}
+@keyframes pm{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(240,165,0,.4)}50%{opacity:.75;box-shadow:0 0 0 5px rgba(240,165,0,0)}}
+@keyframes pr{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes bk{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes si{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes vp{0%,100%{border-color:#222}50%{border-color:#555}}
+@keyframes vdot{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="wordmark">⛽ GAS TOWN</div>
+    <div class="pill pill-convoy">PRE-LAUNCH SPRINT</div>
+    <div class="pill pill-gstack">⚙ gstack 96k★</div>
+    <div class="counter">tasks <b id="done-count">3</b>&nbsp;/&nbsp;6 done</div>
+    <div class="spacer"></div>
+    <a class="vercel-live" id="vercel-live-link" href="#" target="_blank">
+      <div class="vercel-live-dot"></div>
+      ▲ LIVE ON VERCEL
+    </a>
+    <div class="live">LIVE</div>
+    <button class="deploy-btn" id="deploy-btn" onclick="triggerDemo()">▶ DEPLOY AGENTS</button>
+  </div>
+
+  <div class="panels">
+
+    <!-- LEFT: AGENT TREE -->
+    <div class="panel">
+      <div class="ph"><div class="ph-dot"></div>Agent Tree</div>
+      <div class="pb">
+
+        <div class="ac mayor-card">
+          <div class="ac-top"><div class="sd s-mayor"></div><div class="an" style="color:var(--mayor)">👑 The Mayor</div></div>
+          <div class="ar">ORCHESTRATOR</div>
+          <div class="at" id="mayor-task">Convoy: Pre-Launch Sprint</div>
+          <div class="override-row"><button class="ov-btn" onclick="overrideAgent('mayor','skip')">⏭ Skip Step</button></div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="ac working" id="card-auth">
+          <div class="ac-top"><div class="sd s-working" id="dot-auth"></div><div class="an" style="color:var(--green)">polecat-auth</div><div class="pb-badge pb-high">HIGH</div></div>
+          <div class="ar">JWT MIDDLEWARE</div>
+          <div class="at" id="task-auth">Writing src/auth/jwt.go...</div>
+          <div class="override-row"><button class="ov-btn done-btn" onclick="overrideAgent('auth','done')">✓ Force Done</button><button class="ov-btn stuck-btn" onclick="overrideAgent('auth','stuck')">⚠ Stuck</button></div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="ac working" id="card-tests">
+          <div class="ac-top"><div class="sd s-working" id="dot-tests"></div><div class="an" style="color:var(--blue)">polecat-tests</div><div class="pb-badge pb-high">HIGH</div></div>
+          <div class="ar">TEST ENGINEER</div>
+          <div class="at" id="task-tests">Writing tests/auth_test.go</div>
+          <div class="override-row"><button class="ov-btn done-btn" onclick="overrideAgent('tests','done')">✓ Force Done</button><button class="ov-btn stuck-btn" onclick="overrideAgent('tests','stuck')">⚠ Stuck</button></div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="ac" id="card-debug">
+          <div class="ac-top"><div class="sd s-idle" id="dot-debug"></div><div class="an" style="color:var(--red)">polecat-debug</div><div class="pb-badge pb-high">HIGH</div></div>
+          <div class="ar">SEC AUDITOR <span class="gs-tag">gstack /cso</span></div>
+          <div class="at" id="task-debug">Waiting for diffs — OWASP+STRIDE ready</div>
+          <div class="override-row"><button class="ov-btn done-btn" onclick="overrideAgent('debug','done')">✓ Force Done</button><button class="ov-btn stuck-btn" onclick="overrideAgent('debug','stuck')">⚠ Stuck</button></div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="ac" id="card-docs">
+          <div class="ac-top"><div class="sd s-idle" id="dot-docs"></div><div class="an" style="color:var(--purple)">polecat-docs</div><div class="pb-badge pb-low">LOW</div></div>
+          <div class="ar">DOCUMENTATION</div>
+          <div class="at" id="task-docs">Waiting for auth to complete</div>
+          <div class="override-row"><button class="ov-btn done-btn" onclick="overrideAgent('docs','done')">✓ Force Done</button><button class="ov-btn stuck-btn" onclick="overrideAgent('docs','stuck')">⚠ Stuck</button></div>
+        </div>
+        <div class="connector"></div>
+
+        <div class="ac" id="card-review">
+          <div class="ac-top"><div class="sd s-idle" id="dot-review"></div><div class="an" style="color:var(--orange)">polecat-review</div><div class="pb-badge pb-med">MED</div></div>
+          <div class="ar">STAFF ENG <span class="gs-tag">gstack /review</span></div>
+          <div class="at" id="task-review">Idle — awaiting diffs</div>
+          <div class="override-row"><button class="ov-btn done-btn" onclick="overrideAgent('review','done')">✓ Force Done</button><button class="ov-btn stuck-btn" onclick="overrideAgent('review','stuck')">⚠ Stuck</button></div>
+        </div>
+        <div class="connector"></div>
+
+        <!-- Vercel deploy card — NEW -->
+        <div class="ac" id="card-deploy" style="display:none">
+          <div class="ac-top"><div class="sd s-vercel" id="dot-deploy"></div><div class="an" style="color:#ccc">▲ vercel deploy</div></div>
+          <div class="ar">DEPLOYMENT <span class="vc-tag">vercel mcp</span></div>
+          <div class="at" id="task-deploy">Triggered by Mayor after merge</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CENTRE: MAYOR LOG + STREAMS -->
+    <div class="panel">
+      <div class="ph"><div class="ph-dot"></div>Mayor Reasoning Log + Agent Streams</div>
+      <div class="pb">
+
+        <div class="ts-sec">
+          <div class="ts-lbl" style="color:var(--mayor);border-color:var(--mayor-dim)">Mayor — Live Reasoning</div>
+          <div class="mayor-log" id="mayor-log">
+            <div><span class="mk">input</span>: <span class="mv">"<span id="mayor-preview">paste standup notes to begin...</span>"</span></div>
+            <div id="mayor-plan" style="color:var(--text3);font-style:italic;margin-top:5px">Awaiting task input...</div>
+          </div>
+        </div>
+
+        <div class="ts-sec">
+          <div class="ts-lbl" style="color:var(--green);border-color:var(--green-dim)">polecat-auth</div>
+          <div class="thought auth">
+            <div class="ta auth">polecat-auth · JWT MIDDLEWARE</div>
+            <div class="tc typing">
+              <div class="l"><span class="cm">// Examining server.go for handler pattern</span></div>
+              <div class="l"><span class="cm">// Route: POST /auth/token → HS256 signing</span></div>
+              <div class="l"><span class="kw">func</span> <span class="fn">JWTMiddleware</span>(secret []<span class="kw">byte</span>) http.Handler {</div>
+              <div class="l">&nbsp;&nbsp;claims := &amp;jwt.RegisteredClaims{}</div>
+              <div class="l">&nbsp;&nbsp;tok, err := jwt.ParseWithClaims(raw, claims...)<span class="cur g"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ts-sec">
+          <div class="ts-lbl" style="color:var(--blue);border-color:var(--blue-dim)">polecat-tests</div>
+          <div class="thought tests">
+            <div class="ta tests">polecat-tests · TEST ENGINEER</div>
+            <div class="tc typing">
+              <div class="l"><span class="cm">// Table-driven tests — 6 cases</span></div>
+              <div class="l"><span class="kw">func</span> <span class="fn">TestJWT</span>(t *testing.T) {</div>
+              <div class="l">&nbsp;&nbsp;cases := []<span class="kw">struct</span>{ name, tok <span class="kw">string</span>; want <span class="kw">int</span> }{</div>
+              <div class="l">&nbsp;&nbsp;&nbsp;&nbsp;{<span class="st">"valid"</span>,<span class="fn">gen</span>(secret,0),200},{<span class="st">"expired"</span>,<span class="fn">gen</span>(secret,-1),401},<span class="cur b"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ts-sec">
+          <div class="ts-lbl" style="color:var(--red);border-color:var(--red-dim)">polecat-debug <span class="gs-tag">gstack /cso</span></div>
+          <div class="thought debug">
+            <div class="ta debug">polecat-debug · OWASP+STRIDE</div>
+            <div class="tc" id="debug-stream" style="color:var(--text3);font-style:italic">
+              Idle — waiting for polecat-auth diff...
+            </div>
+          </div>
+        </div>
+
+        <div class="ts-sec">
+          <div class="ts-lbl" style="color:var(--orange);border-color:var(--orange-dim)">polecat-review <span class="gs-tag">gstack /review</span></div>
+          <div class="thought review">
+            <div class="ta review">polecat-review · STAFF ENGINEER</div>
+            <div class="tc" style="color:var(--text3);font-style:italic">Idle — waiting for diffs...</div>
+          </div>
+        </div>
+
+        <!-- VERCEL DEPLOY BLOCK — appears after merge -->
+        <div class="vercel-deploy-block" id="vercel-block">
+          <div class="vd-header">
+            <span class="vd-logo">▲ Vercel</span>
+            <span class="vd-status building" id="vd-status">BUILDING</span>
+            <span style="font-size:9px;color:var(--text3);margin-left:auto" id="vd-elapsed">0s</span>
+          </div>
+          <div class="vd-row"><span class="vd-key">project</span><span class="vd-val" id="vd-project">gastown-demo</span></div>
+          <div class="vd-row"><span class="vd-key">branch</span><span class="vd-val">main</span></div>
+          <div class="vd-row"><span class="vd-key">region</span><span class="vd-val">bom1 (Mumbai)</span></div>
+          <div class="vd-row" id="vd-url-row" style="display:none"><span class="vd-key">url</span><a class="vd-url" id="vd-url" href="#" target="_blank"></a></div>
+          <div class="vd-build-log" id="vd-log">
+            <div class="vl">$ vercel build</div>
+            <div class="vl">✓ Installing dependencies...</div>
+            <div class="vl">✓ Building application...</div>
+            <div class="vl" id="vd-log-4" style="display:none">✓ Optimizing output...</div>
+            <div class="vl" id="vd-log-5" style="display:none" style="color:#00e5a0">✓ <span style="color:#00e5a0">Deployment complete</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: EVENT FEED + NOTES -->
+    <div class="panel">
+      <div class="ph"><div class="ph-dot"></div>Live Event Feed</div>
+      <div class="pb" id="event-feed">
+
+        <div class="ev">
+          <div class="ev-top"><span class="ev-time">14:32:07</span><span class="ap" style="background:var(--green-bg);color:var(--green);border:1px solid var(--green-dim)">auth</span><span class="eb b-cw">CODE_WRITTEN</span></div>
+          <div class="ev-desc">jwt.go — 84 lines, HS256 signing, expiry validation</div>
+        </div>
+        <div class="ev">
+          <div class="ev-top"><span class="ev-time">14:31:54</span><span class="ap" style="background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-dim)">tests</span><span class="eb b-st">TASK_STARTED</span></div>
+          <div class="ev-desc">Writing 6 table-driven tests for JWT middleware</div>
+        </div>
+        <div class="ev">
+          <div class="ev-top"><span class="ev-time">14:31:42</span><span class="ap" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-dim)">debug</span><span class="eb b-gs">GSTACK_LOADED</span></div>
+          <div class="ev-desc">gstack /cso — OWASP Top 10, STRIDE, 17 FP exclusions, 8/10+ confidence gate</div>
+        </div>
+        <div class="ev">
+          <div class="ev-top"><span class="ev-time">14:31:29</span><span class="ap" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-dim)">debug</span><span class="eb b-sp">AGENT_SPAWNED</span></div>
+          <div class="ev-desc">polecat-debug online — worktree /wt-debug ready</div>
+        </div>
+        <div class="ev">
+          <div class="ev-top"><span class="ev-time">14:31:25</span><span class="ap" style="background:var(--green-bg);color:var(--green);border:1px solid var(--green-dim)">auth</span><span class="eb b-sp">AGENT_SPAWNED</span></div>
+          <div class="ev-desc">polecat-auth online — worktree /wt-auth ready</div>
+        </div>
+        <div class="ev">
+          <div class="ev-top"><span class="ev-time">14:31:20</span><span class="ap" style="background:var(--mayor-bg);color:var(--mayor);border:1px solid var(--mayor-dim)">mayor</span><span class="eb b-mg">CONVOY_CREATED</span></div>
+          <div class="ev-desc">Pre-Launch Sprint — 6 tasks, 5 agents dispatched via DO Inference</div>
+        </div>
+
+      </div>
+
+      <div class="notes-wrap">
+        <div class="notes-lbl">Standup Notes → Mayor → Agents → Vercel</div>
+        <textarea class="notes-input" id="notes-input" rows="3"
+          placeholder="Paste real standup notes — Mayor parses, agents ship, Vercel deploys">Fix login auth bug ASAP, add rate limiting before launch, tests broken on user endpoint, README out of date, check new search route for SQL injection</textarea>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const AS={
+  mayor:{c:'#f0a500',bg:'#0d0a00',b:'#6b4800'},
+  auth:{c:'#00e5a0',bg:'#001a12',b:'#004d36'},
+  tests:{c:'#38bdf8',bg:'#001828',b:'#003d5c'},
+  debug:{c:'#f87171',bg:'#180505',b:'#5c1515'},
+  docs:{c:'#a78bfa',bg:'#140d28',b:'#3d2a70'},
+  review:{c:'#fb923c',bg:'#180e04',b:'#5a2e0a'},
+  vercel:{c:'#fff',bg:'#050505',b:'#444'},
+};
+function tnow(){return new Date().toLocaleTimeString('en-US',{hour12:false})}
+function injectEvent(role,cls,label,desc){
+  const s=AS[role]||AS.auth;
+  const f=document.getElementById('event-feed');
+  const el=document.createElement('div');el.className='ev';
+  el.innerHTML=`<div class="ev-top"><span class="ev-time">${tnow()}</span><span class="ap" style="background:${s.bg};color:${s.c};border:1px solid ${s.b}">${role}</span><span class="eb ${cls}">${label}</span></div><div class="ev-desc">${desc}</div>`;
+  f.insertBefore(el,f.firstChild);
+}
+function injectEventLink(role,cls,label,desc,url){
+  const s=AS[role]||AS.auth;
+  const f=document.getElementById('event-feed');
+  const el=document.createElement('div');el.className='ev';
+  el.innerHTML=`<div class="ev-top"><span class="ev-time">${tnow()}</span><span class="ap" style="background:${s.bg};color:${s.c};border:1px solid ${s.b}">${role}</span><span class="eb ${cls}">${label}</span></div><div class="ev-desc">${desc}<br><a class="ev-link" href="${url}" target="_blank">→ ${url}</a></div>`;
+  f.insertBefore(el,f.firstChild);
+}
+function setState(role,state,txt){
+  const dot=document.getElementById('dot-'+role);
+  const card=document.getElementById('card-'+role);
+  const task=document.getElementById('task-'+role);
+  if(!dot)return;
+  dot.className='sd s-'+state;
+  if(card){card.className='ac';if(role==='mayor')card.classList.add('mayor-card');if(state==='working')card.classList.add('working');if(state==='done')card.classList.add('done');if(state==='stuck')card.classList.add('stuck');if(state==='vercel')card.classList.add('deploying');}
+  if(task&&txt)task.textContent=txt;
+}
+function bumpDone(){const el=document.getElementById('done-count');el.textContent=Math.min(parseInt(el.textContent)+1,6);}
+
+function updateMayorLog(notes,tasks){
+  document.getElementById('mayor-preview').textContent=notes.substring(0,55)+'...';
+  const p=document.getElementById('mayor-plan');
+  p.style.fontStyle='normal';p.style.color='#c8a84a';
+  const rows=tasks.map(t=>`  { <span class="mk">agent</span>: <span class="mv">"${t.a}"</span>, <span class="mk">priority</span>: <span style="color:${t.p==='HIGH'?'var(--red)':'#fb923c'}">"${t.p}"</span> }`).join(',\n');
+  p.innerHTML=`<span class="mk">convoy</span>: <span class="mv">"Pre-Launch Sprint"</span>\n<span class="mk">tasks</span>: [\n${rows}\n]\n<span class="mk">deploy</span>: <span class="mv">"vercel mcp → auto on merge"</span>\n<span class="mk">status</span>: <span style="color:var(--green)">DISPATCHING<span class="ml-cursor"></span></span>`;
+}
+
+function runVercelDeploy(){
+  // Show the deploy card in agent tree
+  const deployCard=document.getElementById('card-deploy');
+  deployCard.style.display='block';
+  setState('deploy','vercel','Deploying to Vercel...');
+
+  // Show the vercel deploy block in centre panel
+  const vblock=document.getElementById('vercel-block');
+  vblock.classList.add('show');
+
+  injectEvent('vercel','b-vb','DEPLOY_STARTED','Vercel MCP triggered — building from main branch');
+
+  // Elapsed timer
+  let secs=0;
+  const timer=setInterval(()=>{
+    secs++;document.getElementById('vd-elapsed').textContent=secs+'s';
+    if(secs===8) document.getElementById('vd-log-4').style.display='block';
+  },1000);
+
+  // After build completes
+  setTimeout(()=>{
+    clearInterval(timer);
+    const fakeUrl='https://gastown-demo-'+Math.random().toString(36).slice(2,8)+'.vercel.app';
+    document.getElementById('vd-status').textContent='READY';
+    document.getElementById('vd-status').className='vd-status ready';
+    document.getElementById('vd-log-5').style.display='block';
+    document.getElementById('vd-url-row').style.display='flex';
+    document.getElementById('vd-url').textContent=fakeUrl;
+    document.getElementById('vd-url').href='#';
+
+    // Show LIVE badge in topbar
+    const liveLink=document.getElementById('vercel-live-link');
+    liveLink.href='#';liveLink.classList.add('show');
+
+    setState('deploy','done','Deployed ✓ — live on Vercel');
+    injectEventLink('vercel','b-vr','DEPLOYMENT_READY','Build complete — 12s · bom1 region · 3 functions',fakeUrl);
+    document.getElementById('mayor-task').textContent='Convoy complete ✓ Live on Vercel';
+  },12000);
+}
+
+function activateDebug(){
+  setState('debug','working','Running gstack /cso on jwt.go diff...');
+  injectEvent('debug','b-cs','CSO_RUNNING','gstack /cso — OWASP Top 10 + STRIDE on jwt.go');
+  const ds=document.getElementById('debug-stream');
+  ds.style.fontStyle='normal';ds.style.color='var(--text2)';
+  ds.innerHTML=`<div class="typing"><div class="l"><span class="cm">// gstack /cso · 8/10+ confidence gate</span></div><div class="l"><span class="cm">// Scanning jwt.go · 17 FP exclusions</span></div><div class="l"><span class="er">⚠ A2 Broken Auth</span> — no token revocation</div><div class="l"><span class="er">⚠ A7 Ident Fail</span> — issuer claim missing</div><div class="l">→ 2 findings, confidence 9/10<span class="cur r"></span></div></div>`;
+  setTimeout(()=>{
+    injectEvent('debug','b-cs','AUDIT_DONE','2 findings raised: token revocation + issuer claim');
+    setState('debug','done','Audit done ✓');bumpDone();
+    setTimeout(()=>{setState('review','working','Running gstack /review...');injectEvent('review','b-st','TASK_STARTED','gstack /review — staff eng audit on all diffs');},1200);
+  },5000);
+}
+
+function overrideAgent(role,action){
+  if(action==='done'){setState(role,'done','Done (override)');injectEvent(role,'b-mo','MANUAL_OVERRIDE',`${role} advanced to DONE by operator`);bumpDone();}
+  else if(action==='stuck'){setState(role,'stuck','STUCK');injectEvent(role,'b-rf','AGENT_STUCK',`${role} marked stuck by operator`);}
+  else if(action==='skip'){injectEvent('mayor','b-mo','STEP_SKIPPED','Mayor step skipped — convoy continuing');}
+}
+
+let running=false;
+function triggerDemo(){
+  if(running)return;running=true;
+  const btn=document.getElementById('deploy-btn');
+  btn.textContent='⏸ RUNNING...';btn.classList.add('running');
+  const notes=document.getElementById('notes-input').value||'Fix auth, add tests, audit security';
+  const tasks=[{a:'polecat-auth',p:'HIGH'},{a:'polecat-tests',p:'HIGH'},{a:'polecat-debug',p:'HIGH'},{a:'polecat-docs',p:'LOW'},{a:'polecat-review',p:'MED'}];
+  injectEvent('mayor','b-mg','CONVOY_CREATED',`Mayor parsing: "${notes.substring(0,40)}..."`);
+  updateMayorLog(notes,tasks);
+  document.getElementById('mayor-task').textContent='Dispatching convoy...';
+  ['auth','tests','debug','docs','review'].forEach((r,i)=>setTimeout(()=>{setState(r,'working','Task assigned');injectEvent(r,'b-sp','AGENT_SPAWNED',`${r} online — worktree ready`);},600+i*380));
+  setTimeout(()=>{injectEvent('auth','b-cw','CODE_WRITTEN','jwt.go — 84 lines pushed');setState('auth','done','jwt.go ✓');bumpDone();},3200);
+  setTimeout(()=>{injectEvent('tests','b-cw','CODE_WRITTEN','auth_test.go — 6 tests pushed');setState('tests','done','6 tests ✓');bumpDone();},4100);
+  setTimeout(activateDebug,5000);
+  setTimeout(()=>{injectEvent('docs','b-cw','CODE_WRITTEN','README updated');setState('docs','done','README ✓');bumpDone();},6200);
+  setTimeout(()=>{injectEvent('review','b-rp','REVIEW_PASSED','gstack /review — no blocking issues');setState('review','done','Review passed ✓');bumpDone();},9500);
+  setTimeout(()=>{
+    injectEvent('mayor','b-pr','PR_OPENED','PR #43 opened — github.com/demo-repo/pull/43');
+    setTimeout(()=>{
+      injectEvent('mayor','b-mg','MERGED','Refinery merged to main — triggering Vercel deploy via MCP');
+      document.getElementById('done-count').textContent='6';
+      // kick off Vercel deploy
+      setTimeout(runVercelDeploy,800);
+      btn.textContent='▶ DEPLOY AGENTS';btn.classList.remove('running');running=false;
+    },1400);
+  },11200);
+}
+
+// ambient
+setTimeout(()=>injectEvent('auth','b-cw','CODE_WRITTEN','jwt_validate() — expiry check committed'),4500);
+setTimeout(()=>injectEvent('tests','b-st','TASK_STARTED','TestJWTExpiry — edge case'),8000);
+</script>
+</body>
+</html>
