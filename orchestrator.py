@@ -176,12 +176,14 @@ No explanation needed. Just write the code and execute the git steps."""
         return
 
     try:
+        prompt_file = os.path.join(TMP_DIR, f"{agent_name}-prompt.txt")
+        with open(prompt_file, "w") as f:
+            f.write(prompt)
         subprocess.run(["tmux", "new-window", "-t", "gastown", "-n", role],
                        capture_output=True)
-        safe_prompt = prompt.replace("'", "'\"'\"'")
         subprocess.run([
             "tmux", "send-keys", "-t", f"gastown:{role}",
-            f"cd {worktree} && claude --print '{safe_prompt}'", "Enter"
+            f"cd {worktree} && claude --print \"$(cat {prompt_file})\"", "Enter"
         ])
     except FileNotFoundError:
         emit(agent_name, "AGENT_STUCK",
@@ -367,12 +369,14 @@ Write clean, deploy-ready code. No placeholders."""
         return
 
     try:
+        prompt_file = os.path.join(TMP_DIR, f"{agent_name}-prompt.txt")
+        with open(prompt_file, "w") as f:
+            f.write(prompt)
         subprocess.run(["tmux", "new-window", "-t", "gastown", "-n", f"b-{role}"],
                        capture_output=True)
-        safe_prompt = prompt.replace("'", "'\"'\"'")
         subprocess.run([
             "tmux", "send-keys", "-t", f"gastown:b-{role}",
-            f"cd {project_dir} && claude --print '{safe_prompt}'", "Enter"
+            f"cd {project_dir} && claude --print \"$(cat {prompt_file})\"", "Enter"
         ])
     except FileNotFoundError:
         emit(agent_name, "AGENT_STUCK",
