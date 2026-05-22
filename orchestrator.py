@@ -475,6 +475,57 @@ def deploy_new_project(project_dir, project_name):
     return deploy_url
 
 
+def _bootstrap_nextjs(project_dir, project_name):
+    """Write minimal Next.js project files directly — no npx, no interactive prompts."""
+    os.makedirs(os.path.join(project_dir, "src", "app"), exist_ok=True)
+    os.makedirs(os.path.join(project_dir, "public"), exist_ok=True)
+
+    files = {
+        "package.json": json.dumps({
+            "name": project_name, "version": "0.1.0", "private": True,
+            "scripts": {"dev": "next dev", "build": "next build", "start": "next start"},
+            "dependencies": {"next": "^14.0.0", "react": "^18.0.0", "react-dom": "^18.0.0"},
+            "devDependencies": {"typescript": "^5", "@types/react": "^18",
+                                "tailwindcss": "^3", "autoprefixer": "^10", "postcss": "^8"}
+        }, indent=2),
+        "next.config.js": "/** @type {import('next').NextConfig} */\nmodule.exports = {};\n",
+        "tsconfig.json": json.dumps({
+            "compilerOptions": {"target":"es5","lib":["dom","esnext"],"allowJs":True,
+                                "skipLibCheck":True,"strict":True,"module":"esnext",
+                                "moduleResolution":"bundler","jsx":"preserve",
+                                "incremental":True,"paths":{"@/*":["./src/*"]}},
+            "include":["next-env.d.ts","**/*.ts","**/*.tsx"],
+            "exclude":["node_modules"]
+        }, indent=2),
+        "tailwind.config.js": 'module.exports={content:["./src/**/*.{ts,tsx}"],theme:{extend:{}},plugins:[]};\n',
+        "postcss.config.js": 'module.exports={plugins:{tailwindcss:{},autoprefixer:{}}};\n',
+        "src/app/layout.tsx": '''import type { Metadata } from "next";
+export const metadata: Metadata = { title: "''' + project_name + '''", description: "Built by Gas Town" };
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <html lang="en"><body>{children}</body></html>;
+}
+''',
+        "src/app/page.tsx": '''export default function Home() {
+  return <main className="min-h-screen p-8"><h1 className="text-4xl font-bold">''' + project_name + '''</h1><p className="mt-4 text-gray-600">Built by Gas Town multi-agent system.</p></main>;
+}
+''',
+        "src/app/globals.css": "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n",
+    }
+
+    for path, content in files.items():
+        full = os.path.join(project_dir, path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+
+    emit("mayor", "TASK_STARTED", "Installing npm dependencies (60-90s)...")
+    try:
+        subprocess.run(["npm", "install", "--prefer-offline"],
+                       cwd=project_dir, capture_output=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        emit("mayor", "TASK_STARTED", "npm install timed out — agents will proceed anyway")
+
+
 def build_project(description):
     emit("mayor", "AGENT_SPAWNED", "Mayor online — Gas Town BUILD MODE")
     plan = parse_project_brief(description)
@@ -488,17 +539,13 @@ def build_project(description):
 
     if not DRY_RUN:
         if framework == "nextjs":
-            subprocess.run(
-                ["npx", "create-next-app@latest", project_name,
-                 "--typescript", "--tailwind", "--eslint",
-                 "--app", "--src-dir", "--import-alias", "@/*", "--yes"],
-                cwd=os.path.expanduser("~/gastown/builds"), capture_output=True
-            )
+            _bootstrap_nextjs(project_dir, project_name)
         elif framework == "fastapi":
             subprocess.run(["pip3", "install", "fastapi", "uvicorn"],
-                           capture_output=True)
+                           capture_output=True, timeout=120)
         elif framework in ("express", "go-api"):
-            subprocess.run(["npm", "init", "-y"], cwd=project_dir, capture_output=True)
+            subprocess.run(["npm", "init", "-y"], cwd=project_dir,
+                           capture_output=True, timeout=60)
 
     emit("mayor", "TASK_STARTED",
          f"Bootstrap done — spawning {len(plan['tasks'])} agents")
