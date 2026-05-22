@@ -17,7 +17,7 @@ BRIDGE_URL       = "http://localhost:8080/ingest"
 BRIDGE_SECRET    = os.environ.get("BRIDGE_SECRET", "gastown-demo-2026")
 VERCEL_TOKEN     = os.environ.get("VERCEL_TOKEN", "")
 VERCEL_PROJECT   = os.environ.get("VERCEL_PROJECT", "gastown-demo")
-MODEL            = "llama3.3-70b-instruct"
+MODEL            = "deepseek-v4-pro"
 
 WORKTREES = {
     "polecat-auth":   os.path.expanduser("~/gastown/wt-auth"),
