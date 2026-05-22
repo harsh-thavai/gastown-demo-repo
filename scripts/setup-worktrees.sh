@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-REPO=~/gastown/demo-repo
+REPO=~/gastown
 cd $REPO
 
 git checkout main
