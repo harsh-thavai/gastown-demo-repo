@@ -179,10 +179,14 @@ No explanation needed. Just write the code and execute the git steps."""
         prompt_file = os.path.join(TMP_DIR, f"{agent_name}-prompt.txt")
         with open(prompt_file, "w") as f:
             f.write(prompt)
-        subprocess.run(["tmux", "new-window", "-t", "gastown", "-n", role],
-                       capture_output=True)
+        r = subprocess.run(
+            ["tmux", "new-window", "-t", "gastown", "-n", role,
+             "-P", "-F", "#{window_index}"],
+            capture_output=True, text=True
+        )
+        win_idx = r.stdout.strip()
         subprocess.run([
-            "tmux", "send-keys", "-t", f"gastown:{role}",
+            "tmux", "send-keys", "-t", f"gastown:{win_idx}",
             f"cd {worktree} && claude --print \"$(cat {prompt_file})\"", "Enter"
         ])
     except FileNotFoundError:
@@ -372,10 +376,14 @@ Write clean, deploy-ready code. No placeholders."""
         prompt_file = os.path.join(TMP_DIR, f"{agent_name}-prompt.txt")
         with open(prompt_file, "w") as f:
             f.write(prompt)
-        subprocess.run(["tmux", "new-window", "-t", "gastown", "-n", f"b-{role}"],
-                       capture_output=True)
+        r = subprocess.run(
+            ["tmux", "new-window", "-t", "gastown", "-n", f"b-{role}",
+             "-P", "-F", "#{window_index}"],
+            capture_output=True, text=True
+        )
+        win_idx = r.stdout.strip()
         subprocess.run([
-            "tmux", "send-keys", "-t", f"gastown:b-{role}",
+            "tmux", "send-keys", "-t", f"gastown:{win_idx}",
             f"cd {project_dir} && claude --print \"$(cat {prompt_file})\"", "Enter"
         ])
     except FileNotFoundError:
