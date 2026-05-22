@@ -46,7 +46,8 @@ def emit(agent, event_type, text, diff=None):
     print(f"[{payload['time']}] [{agent}] {event_type}: {text}")
 
 
-DRY_RUN = False  # set via --dry-run CLI flag
+DRY_RUN   = False  # set via --dry-run CLI flag
+BUILD_MODE = False  # set via --build CLI flag
 
 DRY_RUN_PLAN = {
     "convoy": "Pre-Launch Sprint",
@@ -59,10 +60,23 @@ DRY_RUN_PLAN = {
     ]
 }
 
+DRY_RUN_BUILD_PLAN = {
+    "convoy": "SaaS Dashboard Build",
+    "project_name": "saas-dashboard",
+    "framework": "nextjs",
+    "tasks": [
+        {"agent": "polecat-auth",   "task": "Scaffold NextAuth.js login/register pages with JWT", "priority": "HIGH",   "file": "src/app/auth/login/page.tsx"},
+        {"agent": "polecat-tests",  "task": "Write Jest tests for auth and dashboard components",  "priority": "HIGH",   "file": "src/__tests__/auth.test.tsx"},
+        {"agent": "polecat-debug",  "task": "Security audit of auth flow and Stripe webhook",      "priority": "HIGH",   "file": "src/app/api/webhook/route.ts"},
+        {"agent": "polecat-docs",   "task": "Write README with setup, env vars, deploy steps",     "priority": "LOW",    "file": "README.md"},
+        {"agent": "polecat-review", "task": "Final review and polish of all scaffolded files",     "priority": "MEDIUM", "file": "src/app/dashboard/page.tsx"},
+    ]
+}
+
 
 def call_do_inference(system, user):
     if DRY_RUN:
-        return json.dumps(DRY_RUN_PLAN)
+        return json.dumps(DRY_RUN_BUILD_PLAN if BUILD_MODE else DRY_RUN_PLAN)
     if not DO_INFERENCE_URL or not MODEL_ACCESS_KEY:
         raise RuntimeError("DO_INFERENCE_URL and MODEL_ACCESS_KEY must be set in .env")
     resp = requests.post(
@@ -520,6 +534,7 @@ if __name__ == "__main__":
         print("[dry-run] API and tmux calls skipped — events emitted to bridge only")
 
     if "--build" in args:
+        BUILD_MODE = True
         args = [a for a in args if a != "--build"]
         build_project(" ".join(args))
     elif args:
