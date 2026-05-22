@@ -11,8 +11,8 @@ except Exception:
 # Cross-platform temp directory (allows running on Windows/Unix)
 TMP_DIR = os.environ.get("TMPDIR") or os.environ.get("TMP") or os.environ.get("TEMP") or tempfile.gettempdir()
 
-DO_INFERENCE_URL = os.environ["DO_INFERENCE_URL"]   # https://inference.do-ai.run/v1
-MODEL_ACCESS_KEY = os.environ["MODEL_ACCESS_KEY"]   # sk-do-...
+DO_INFERENCE_URL = os.environ.get("DO_INFERENCE_URL", "")
+MODEL_ACCESS_KEY = os.environ.get("MODEL_ACCESS_KEY", "")
 BRIDGE_URL       = "http://localhost:8080/ingest"
 BRIDGE_SECRET    = os.environ.get("BRIDGE_SECRET", "gastown-demo-2026")
 VERCEL_TOKEN     = os.environ.get("VERCEL_TOKEN", "")
@@ -63,6 +63,8 @@ DRY_RUN_PLAN = {
 def call_do_inference(system, user):
     if DRY_RUN:
         return json.dumps(DRY_RUN_PLAN)
+    if not DO_INFERENCE_URL or not MODEL_ACCESS_KEY:
+        raise RuntimeError("DO_INFERENCE_URL and MODEL_ACCESS_KEY must be set in .env")
     resp = requests.post(
         f"{DO_INFERENCE_URL}/chat/completions",
         headers={"Authorization": f"Bearer {MODEL_ACCESS_KEY}",
