@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -354,6 +355,26 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok", "clients": n})
 }
 
+func handleDashboard(w http.ResponseWriter, r *http.Request) {
+	// Serve dashboard/index.html — same origin as bridge, no mixed-content issues
+	dashPath := os.Getenv("DASHBOARD_PATH")
+	if dashPath == "" {
+		dashPath = "/root/gastown/dashboard/index.html"
+	}
+	data, err := os.ReadFile(dashPath)
+	if err != nil {
+		http.Error(w, "dashboard not found: "+dashPath, 404)
+		return
+	}
+	// Inject BRIDGE_URL as empty string so JS uses relative paths (same origin)
+	html := string(data)
+	html = strings.ReplaceAll(html,
+		"const BRIDGE = (window.BRIDGE_URL || 'http://168.144.117.169:8080');",
+		"const BRIDGE = '';")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(html))
+}
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -361,6 +382,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/",           handleDashboard)
 	mux.HandleFunc("/events",     handleSSE)
 	mux.HandleFunc("/ingest",     handleIngest)
 	mux.HandleFunc("/task",       handleTask)
