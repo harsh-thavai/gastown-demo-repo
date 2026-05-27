@@ -463,6 +463,104 @@ class TestDeployNewProject(unittest.TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DEPENDENCY AUTO-FIX TESTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestFixMissingDeps(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        # Minimal Next.js structure
+        src_app = os.path.join(self.tmp, "src", "app")
+        os.makedirs(src_app, exist_ok=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write(self, rel_path, content):
+        full = os.path.join(self.tmp, rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+
+    def test_detects_missing_npm_package(self):
+        self._write("src/app/page.tsx",
+                    "import { Button } from 'lucide-react';\nexport default function P(){}")
+        with patch("orchestrator.subprocess.run") as mock_run, \
+             patch("orchestrator.requests.post"):
+            mock_run.return_value = MagicMock(returncode=0)
+            orc._fix_missing_deps(self.tmp)
+        calls = [str(c) for c in mock_run.call_args_list]
+        self.assertTrue(any("lucide-react" in c for c in calls),
+                        "lucide-react should have been installed")
+
+    def test_creates_missing_lib_stub(self):
+        self._write("src/app/dashboard/page.tsx",
+                    "import { db } from '@/lib/db';\nexport default function D(){}")
+        with patch("orchestrator.subprocess.run",
+                   return_value=MagicMock(returncode=0)), \
+             patch("orchestrator.requests.post"):
+            orc._fix_missing_deps(self.tmp)
+        stub = os.path.join(self.tmp, "src", "lib", "db.ts")
+        self.assertTrue(os.path.exists(stub),
+                        "src/lib/db.ts stub should have been created")
+
+    def test_does_not_reinstall_existing_package(self):
+        # Create a fake node_modules/lucide-react dir
+        nm = os.path.join(self.tmp, "node_modules", "lucide-react")
+        os.makedirs(nm)
+        self._write("src/app/page.tsx",
+                    "import { X } from 'lucide-react';\nexport default function P(){}")
+        with patch("orchestrator.subprocess.run") as mock_run, \
+             patch("orchestrator.requests.post"):
+            mock_run.return_value = MagicMock(returncode=0)
+            orc._fix_missing_deps(self.tmp)
+        # npm install should NOT have been called with lucide-react
+        for c in mock_run.call_args_list:
+            args = c[0][0] if c[0] else []
+            if "install" in args:
+                self.assertNotIn("lucide-react", args)
+
+    def test_creates_lib_utils_stub(self):
+        self._write("src/app/page.tsx",
+                    "import { cn } from '@/lib/utils';\nexport default function P(){}")
+        with patch("orchestrator.subprocess.run",
+                   return_value=MagicMock(returncode=0)), \
+             patch("orchestrator.requests.post"):
+            orc._fix_missing_deps(self.tmp)
+        stub = os.path.join(self.tmp, "src", "lib", "utils.ts")
+        self.assertTrue(os.path.exists(stub))
+        with open(stub) as f:
+            content = f.read()
+        self.assertIn("twMerge", content)
+
+    def test_handles_scoped_packages(self):
+        self._write("src/app/page.tsx",
+                    "import * as d from '@radix-ui/react-dialog';\nexport default function P(){}")
+        with patch("orchestrator.subprocess.run") as mock_run, \
+             patch("orchestrator.requests.post"):
+            mock_run.return_value = MagicMock(returncode=0)
+            orc._fix_missing_deps(self.tmp)
+        calls = [str(c) for c in mock_run.call_args_list]
+        self.assertTrue(any("radix-ui" in c for c in calls))
+
+    def test_skips_node_modules(self):
+        """Should not scan node_modules."""
+        nm_file = os.path.join(self.tmp, "node_modules", "some-pkg", "index.ts")
+        os.makedirs(os.path.dirname(nm_file))
+        with open(nm_file, "w") as f:
+            f.write("import { x } from 'unknown-pkg-xyz';\n")
+        with patch("orchestrator.subprocess.run") as mock_run, \
+             patch("orchestrator.requests.post"):
+            mock_run.return_value = MagicMock(returncode=0)
+            orc._fix_missing_deps(self.tmp)
+        for c in mock_run.call_args_list:
+            args = c[0][0] if c[0] else []
+            if "install" in args:
+                self.assertNotIn("unknown-pkg-xyz", args)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # INTEGRATION TESTS
 # ─────────────────────────────────────────────────────────────────────────────
 

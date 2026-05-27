@@ -391,19 +391,26 @@ def _bootstrap_nextjs(project_dir, project_name):
                 "lint":  "next lint",
             },
             "dependencies": {
-                "next": "14.2.5", "react": "^18", "react-dom": "^18",
+                "next": "15.3.2", "react": "^19", "react-dom": "^19",
+                "next-auth": "^5.0.0-beta.28",
+                "lucide-react": "^0.511.0",
+                "stripe": "^17.7.0",
+                "@stripe/stripe-js": "^5.8.0",
+                "zod": "^3.24.4",
+                "clsx": "^2.1.1",
+                "tailwind-merge": "^3.3.0",
             },
             "devDependencies": {
                 "typescript": "^5", "@types/node": "^20",
-                "@types/react": "^18", "@types/react-dom": "^18",
+                "@types/react": "^19", "@types/react-dom": "^19",
                 "tailwindcss": "^3", "autoprefixer": "^10", "postcss": "^8",
-                "eslint": "^8", "eslint-config-next": "14.2.5",
+                "eslint": "^9", "eslint-config-next": "15.3.2",
             },
         }, indent=2),
-        "next.config.js": (
-            "/** @type {import('next').NextConfig} */\n"
-            "const nextConfig = { output: 'standalone' };\n"
-            "module.exports = nextConfig;\n"
+        "next.config.ts": (
+            'import type { NextConfig } from "next";\n'
+            "const nextConfig: NextConfig = {};\n"
+            "export default nextConfig;\n"
         ),
         "tsconfig.json": json.dumps({
             "compilerOptions": {
@@ -604,6 +611,125 @@ def deploy_new_project(project_dir, project_name):
     return _vercel_deploy_api(project_name, project_dir)
 
 
+def _fix_missing_deps(project_dir):
+    """
+    After agents write files, scan every .ts/.tsx for imports.
+    1. Install missing external npm packages.
+    2. Create stub files for missing local @/lib/* paths.
+    """
+    import re as _re
+
+    # Known npm package name mappings (import path → npm package)
+    KNOWN_PKGS = {
+        "next-auth":             "next-auth@^5.0.0-beta.28",
+        "next-auth/react":       "next-auth@^5.0.0-beta.28",
+        "next-auth/providers":   "next-auth@^5.0.0-beta.28",
+        "lucide-react":          "lucide-react",
+        "stripe":                "stripe",
+        "@stripe/stripe-js":     "@stripe/stripe-js",
+        "zod":                   "zod",
+        "clsx":                  "clsx",
+        "tailwind-merge":        "tailwind-merge",
+        "drizzle-orm":           "drizzle-orm",
+        "@radix-ui/react-dialog":"@radix-ui/react-dialog",
+        "@radix-ui/react-label": "@radix-ui/react-label",
+        "react-hook-form":       "react-hook-form",
+        "@hookform/resolvers":   "@hookform/resolvers",
+        "sonner":                "sonner",
+        "date-fns":              "date-fns",
+    }
+
+    # Stub templates for common local lib files
+    LIB_STUBS = {
+        "src/lib/db/index.ts": (
+            "// stub — replace with real DB client\n"
+            "export const db = {} as any;\n"
+        ),
+        "src/lib/db/schema.ts": (
+            "// stub — replace with real schema\n"
+            "export const users = {} as any;\n"
+            "export const subscriptions = {} as any;\n"
+        ),
+        "src/lib/auth.ts": (
+            "import NextAuth from 'next-auth';\n"
+            "export const { handlers, auth, signIn, signOut } = NextAuth({ providers: [] });\n"
+        ),
+        "src/lib/stripe.ts": (
+            "import Stripe from 'stripe';\n"
+            "export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', "
+            "{ apiVersion: '2024-12-18.acacia' });\n"
+        ),
+        "src/lib/utils.ts": (
+            "import { clsx, type ClassValue } from 'clsx';\n"
+            "import { twMerge } from 'tailwind-merge';\n"
+            "export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }\n"
+        ),
+    }
+
+    # Scan all TypeScript files for imports
+    missing_pkgs = set()
+    missing_local = set()
+    import_re = _re.compile(r"""from\s+['"]([^'"]+)['"]""")
+
+    for root, _, files in os.walk(project_dir):
+        if "node_modules" in root:
+            continue
+        for fname in files:
+            if not fname.endswith((".ts", ".tsx")):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath) as f:
+                    src = f.read()
+            except Exception:
+                continue
+            for imp in import_re.findall(src):
+                if imp.startswith("@/") or imp.startswith("~/"):
+                    # Local alias — check if file exists
+                    rel = imp.replace("@/", "src/").replace("~/", "src/")
+                    for ext in ("", ".ts", ".tsx", "/index.ts", "/index.tsx"):
+                        if os.path.exists(os.path.join(project_dir, rel + ext)):
+                            break
+                    else:
+                        missing_local.add(rel)
+                elif not imp.startswith("."):
+                    # External package — get root package name
+                    pkg_root = imp.split("/")[0]
+                    if pkg_root.startswith("@"):
+                        pkg_root = "/".join(imp.split("/")[:2])
+                    nm = os.path.join(project_dir, "node_modules", pkg_root)
+                    if not os.path.exists(nm):
+                        npm_name = KNOWN_PKGS.get(imp) or KNOWN_PKGS.get(pkg_root) or pkg_root
+                        missing_pkgs.add(npm_name)
+
+    # Install missing npm packages
+    if missing_pkgs:
+        pkg_list = sorted(missing_pkgs)
+        emit("mayor", "TASK_STARTED",
+             f"Installing {len(pkg_list)} missing packages: {', '.join(pkg_list)}")
+        try:
+            subprocess.run(
+                ["npm", "install", "--no-audit", "--no-fund"] + pkg_list,
+                cwd=project_dir, capture_output=True, timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            emit("mayor", "TASK_STARTED", "npm install timed out — proceeding")
+
+    # Create stub files for missing local paths
+    for rel in missing_local:
+        stub_key = rel + ".ts"
+        content = LIB_STUBS.get(stub_key) or LIB_STUBS.get(rel + "/index.ts")
+        if not content:
+            # Generic stub
+            content = f"// auto-stub for {rel}\nexport {{}};\n"
+        full = os.path.join(project_dir, stub_key)
+        if not os.path.exists(full):
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w") as f:
+                f.write(content)
+            emit("mayor", "TASK_STARTED", f"Created stub: {stub_key}")
+
+
 def build_project(description):
     emit("mayor", "AGENT_SPAWNED", "Mayor online — Gas Town BUILD MODE")
     plan = parse_project_brief(description)
@@ -639,6 +765,11 @@ def build_project(description):
         time.sleep(0.4)
     for th in threads:
         th.join()
+
+    # Scan generated files — install missing deps, create missing local stubs
+    if not DRY_RUN:
+        emit("mayor", "TASK_STARTED", "Scanning generated files for missing deps...")
+        _fix_missing_deps(project_dir)
 
     repo_url = create_github_repo(project_name, project_dir)
     emit("mayor", "MERGED", f"All agents done — deploying {project_name}")
