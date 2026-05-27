@@ -220,6 +220,48 @@ func handleTask(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 }
 
+func handleBuild(w http.ResponseWriter, r *http.Request) {
+	corsHeaders(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		Notes string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Notes == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := os.WriteFile("/tmp/gastown-build", []byte(body.Notes), 0644); err != nil {
+		http.Error(w, "failed to write build task", http.StatusInternalServerError)
+		return
+	}
+
+	addEvent(Event{
+		Agent:     "mayor",
+		AgentRole: "mayor",
+		Type:      "TASK_STARTED",
+		Text:      "Build requested: " + body.Notes[:min(len(body.Notes), 60)],
+	})
+
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]string{"status": "build accepted"})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func handleDemoStart(w http.ResponseWriter, r *http.Request) {
 	corsHeaders(w)
 	if r.Method == http.MethodOptions {
@@ -322,6 +364,7 @@ func main() {
 	mux.HandleFunc("/events",     handleSSE)
 	mux.HandleFunc("/ingest",     handleIngest)
 	mux.HandleFunc("/task",       handleTask)
+	mux.HandleFunc("/build",      handleBuild)
 	mux.HandleFunc("/demo/start", handleDemoStart)
 	mux.HandleFunc("/state",      handleState)
 	mux.HandleFunc("/health",     handleHealth)

@@ -398,13 +398,16 @@ Respond ONLY with valid JSON, no markdown fences:
 }
 Rules:
 - Max one task per agent.
-- polecat-auth: builds auth pages WITH complete UI (login form, register form — real Tailwind CSS UI)
+- PREFERRED frameworks: vite-react (React apps), fastapi (Python apps).
+  Use nextjs ONLY if the user explicitly asks for Next.js.
+- polecat-auth: builds login/register UI with forms (React components or HTML pages)
 - polecat-tests: writes tests
 - polecat-debug: security review
 - polecat-docs: writes README
-- polecat-review: builds the MAIN dashboard page (src/app/dashboard/page.tsx) with full UI — charts, cards, stats, navigation
-- For nextjs: file paths must be src/app/something/page.tsx for pages
-- EVERY page file must have a complete visual UI — no placeholder text"""
+- polecat-review: builds the MAIN dashboard/home page with full UI (charts, cards, stats, nav)
+- For vite-react: use file paths like src/pages/Dashboard.jsx, src/components/Sidebar.jsx
+- For fastapi: use main.py serving HTML at root, src/pages/*.html for additional pages
+- EVERY page/component must have complete visual UI — no placeholder text"""
 
     raw = call_do_inference(system, f"Project description:\n{description}")
     raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
@@ -1110,6 +1113,8 @@ def build_project(description):
     if not DRY_RUN:
         if framework == "nextjs":
             _bootstrap_nextjs(project_dir, project_name)
+        elif framework in ("vite-react", "react"):
+            _bootstrap_vite_react(project_dir, project_name)
         elif framework == "fastapi":
             _bootstrap_fastapi(project_dir, project_name)
         elif framework in ("express", "go-api"):
@@ -1142,6 +1147,116 @@ def build_project(description):
     emit("mayor", "CONVOY_COMPLETE",
          f"Done. {project_name} live at {deploy_url or repo_url}")
     return deploy_url
+
+
+def _bootstrap_vite_react(project_dir, project_name):
+    """Bootstrap a Vite + React app — no TypeScript, no strict mode, deploys as static."""
+    display_name = project_name.replace("-", " ").title()
+    os.makedirs(os.path.join(project_dir, "src", "pages"), exist_ok=True)
+    os.makedirs(os.path.join(project_dir, "src", "components"), exist_ok=True)
+    os.makedirs(os.path.join(project_dir, "public"), exist_ok=True)
+
+    files = {
+        "package.json": json.dumps({
+            "name": project_name, "version": "0.1.0", "private": True,
+            "type": "module",
+            "scripts": {
+                "dev":     "vite",
+                "build":   "vite build",
+                "preview": "vite preview",
+            },
+            "dependencies": {
+                "react": "^18.3.1", "react-dom": "^18.3.1",
+                "react-router-dom": "^6.28.0",
+                "lucide-react": "^0.511.0",
+                "recharts": "^2.15.3",
+                "clsx": "^2.1.1",
+            },
+            "devDependencies": {
+                "@vitejs/plugin-react": "^4.3.4",
+                "vite": "^6.3.5",
+                "tailwindcss": "^3.4.17",
+                "autoprefixer": "^10.4.21",
+                "postcss": "^8.5.4",
+            },
+        }, indent=2),
+        "vite.config.js": (
+            "import { defineConfig } from 'vite';\n"
+            "import react from '@vitejs/plugin-react';\n"
+            "export default defineConfig({\n"
+            "  plugins: [react()],\n"
+            "  build: { outDir: 'dist' },\n"
+            "});\n"
+        ),
+        "index.html": (
+            "<!DOCTYPE html>\n<html lang='en'>\n<head>\n"
+            "  <meta charset='UTF-8' />\n"
+            "  <meta name='viewport' content='width=device-width, initial-scale=1.0' />\n"
+            f"  <title>{display_name}</title>\n"
+            "</head>\n<body>\n"
+            "  <div id='root'></div>\n"
+            "  <script type='module' src='/src/main.jsx'></script>\n"
+            "</body>\n</html>\n"
+        ),
+        "tailwind.config.js": (
+            "export default {\n"
+            "  content: ['./index.html', './src/**/*.{js,jsx}'],\n"
+            "  theme: { extend: {} },\n"
+            "  plugins: [],\n"
+            "};\n"
+        ),
+        "postcss.config.js": (
+            "export default {\n"
+            "  plugins: { tailwindcss: {}, autoprefixer: {} },\n"
+            "};\n"
+        ),
+        "vercel.json": json.dumps({
+            "buildCommand": "npm run build",
+            "outputDirectory": "dist",
+            "framework": "vite",
+            "regions": ["bom1"],
+        }, indent=2),
+        "src/index.css": (
+            "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n"
+        ),
+        "src/main.jsx": (
+            "import React from 'react';\n"
+            "import ReactDOM from 'react-dom/client';\n"
+            "import App from './App';\n"
+            "import './index.css';\n"
+            "ReactDOM.createRoot(document.getElementById('root')).render(\n"
+            "  <React.StrictMode><App /></React.StrictMode>\n"
+            ");\n"
+        ),
+        "src/App.jsx": (
+            "import React from 'react';\n\n"
+            f"export default function App() {{\n"
+            f"  return (\n"
+            f"    <div className='min-h-screen bg-gray-50'>\n"
+            f"      <div className='max-w-4xl mx-auto p-8'>\n"
+            f"        <h1 className='text-3xl font-bold text-gray-900'>{display_name}</h1>\n"
+            f"        <p className='mt-2 text-gray-500'>Built by Gas Town</p>\n"
+            f"      </div>\n"
+            f"    </div>\n"
+            f"  );\n"
+            f"}}\n"
+        ),
+    }
+
+    for rel_path, content in files.items():
+        full = os.path.join(project_dir, rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+
+    emit("mayor", "TASK_STARTED", "Running npm install for Vite React...")
+    try:
+        subprocess.run(
+            ["npm", "install", "--no-audit", "--no-fund"],
+            cwd=project_dir, capture_output=True, timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        emit("mayor", "TASK_STARTED", "npm install timed out — proceeding")
 
 
 def _bootstrap_fastapi(project_dir, project_name):
@@ -1370,10 +1485,18 @@ if __name__ == "__main__":
     elif args:
         run_convoy(" ".join(args))
     else:
-        task_file = os.path.join(TMP_DIR, "gastown-task")
-        print(f"Watching for {task_file} ...")
+        task_file  = os.path.join(TMP_DIR, "gastown-task")
+        build_file = os.path.join(TMP_DIR, "gastown-build")
+        print(f"Watching for {task_file} or {build_file} ...")
         while True:
-            if os.path.exists(task_file):
+            if os.path.exists(build_file):
+                with open(build_file) as f:
+                    desc = f.read().strip()
+                os.remove(build_file)
+                BUILD_MODE = True
+                build_project(desc)
+                BUILD_MODE = False
+            elif os.path.exists(task_file):
                 with open(task_file) as f:
                     notes = f.read().strip()
                 os.remove(task_file)
