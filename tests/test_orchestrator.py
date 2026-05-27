@@ -658,6 +658,75 @@ class TestFixNextAuthRoutes(unittest.TestCase):
         self.assertEqual(content, original)
 
 
+class TestFixInvalidRouteExports(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write(self, rel, content):
+        full = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+        return full
+
+    def _read(self, rel):
+        with open(os.path.join(self.tmp, rel)) as f:
+            return f.read()
+
+    def test_renames_create_checkout_to_post(self):
+        self._write("src/app/api/stripe/checkout/route.ts",
+            "import Stripe from 'stripe';\n"
+            "export async function createCheckoutSession(req: Request) {\n"
+            "  return Response.json({});\n"
+            "}\n")
+        with patch("orchestrator.requests.post"):
+            orc._fix_invalid_route_exports(self.tmp)
+        content = self._read("src/app/api/stripe/checkout/route.ts")
+        self.assertIn("function POST(", content)
+        self.assertNotIn("function createCheckoutSession(", content)
+
+    def test_renames_handle_webhook_to_post(self):
+        self._write("src/app/api/webhooks/route.ts",
+            "export async function handleWebhook(req: Request) {\n"
+            "  return Response.json({});\n"
+            "}\n")
+        with patch("orchestrator.requests.post"):
+            orc._fix_invalid_route_exports(self.tmp)
+        content = self._read("src/app/api/webhooks/route.ts")
+        self.assertIn("function POST(", content)
+
+    def test_renames_get_user_to_get(self):
+        self._write("src/app/api/users/route.ts",
+            "export async function getUsers(req: Request) {\n"
+            "  return Response.json([]);\n"
+            "}\n")
+        with patch("orchestrator.requests.post"):
+            orc._fix_invalid_route_exports(self.tmp)
+        content = self._read("src/app/api/users/route.ts")
+        self.assertIn("function GET(", content)
+
+    def test_leaves_valid_post_handler_alone(self):
+        original = ("export async function POST(req: Request) {\n"
+                    "  return Response.json({});\n"
+                    "}\n")
+        self._write("src/app/api/test/route.ts", original)
+        with patch("orchestrator.requests.post"):
+            orc._fix_invalid_route_exports(self.tmp)
+        self.assertEqual(self._read("src/app/api/test/route.ts"), original)
+
+    def test_skips_nextauth_routes(self):
+        original = ("import { handlers } from '@/auth';\n"
+                    "export const { GET, POST } = handlers;\n")
+        self._write("src/app/api/auth/nextauth/route.ts", original)
+        with patch("orchestrator.requests.post"):
+            orc._fix_invalid_route_exports(self.tmp)
+        self.assertEqual(self._read("src/app/api/auth/nextauth/route.ts"), original)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # INTEGRATION TESTS
 # ─────────────────────────────────────────────────────────────────────────────

@@ -761,9 +761,10 @@ def _fix_missing_deps(project_dir):
         except subprocess.TimeoutExpired:
             emit("mayor", "TASK_STARTED", "npm install timed out — proceeding")
 
-    # Fix NextAuth v5 route handlers FIRST — this rewrites imports
-    # so the subsequent scan creates correct stubs
+    # Fix route handlers FIRST — rewrites imports so subsequent scan
+    # creates correct stubs for whatever imports remain
     _fix_nextauth_routes(project_dir)
+    _fix_invalid_route_exports(project_dir)
 
     # Always ensure src/auth.ts exists (NextAuth v5 root config)
     auth_stub = os.path.join(project_dir, "src", "auth.ts")
@@ -877,6 +878,79 @@ def _fix_nextauth_routes(project_dir):
                     f.write(correct)
                 emit("mayor", "TASK_STARTED",
                      f"Fixed NextAuth v5 route: {os.path.relpath(fpath, project_dir)}")
+
+
+def _fix_invalid_route_exports(project_dir):
+    """
+    Next.js App Router route.ts files may ONLY export HTTP method handlers:
+    GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+    plus config: dynamic, revalidate, runtime, maxDuration.
+
+    Scan every route.ts and rename any other exported async function to POST
+    (e.g. createCheckoutSession → POST, handleWebhook → POST, etc.)
+    """
+    import re as _re
+
+    VALID_EXPORTS = {
+        "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS",
+        "dynamic", "dynamicParams", "revalidate", "fetchCache",
+        "runtime", "preferredRegion", "maxDuration", "generateStaticParams",
+    }
+
+    # Match: export async function Foo(  OR  export function Foo(
+    fn_export_re = _re.compile(
+        r"export\s+(async\s+)?function\s+(\w+)\s*\("
+    )
+    # Match: export const Foo = ...  OR  export const { Foo } = ...
+    const_export_re = _re.compile(
+        r"export\s+const\s+(\w+)\s*="
+    )
+
+    for root, _, files in os.walk(project_dir):
+        if "node_modules" in root or ".next" in root:
+            continue
+        for fname in files:
+            if fname not in ("route.ts", "route.tsx"):
+                continue
+            # Skip NextAuth routes — already handled
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath) as f:
+                    content = f.read()
+            except Exception:
+                continue
+
+            if "from '@/auth'" in content and "handlers" in content:
+                continue  # NextAuth route — skip
+
+            modified = content
+            changed = False
+
+            # Fix exported functions with invalid names
+            for match in fn_export_re.finditer(content):
+                fn_name = match.group(2)
+                if fn_name not in VALID_EXPORTS:
+                    # Determine best HTTP method from name
+                    name_lower = fn_name.lower()
+                    if any(k in name_lower for k in ("get", "fetch", "list", "read")):
+                        method = "GET"
+                    elif any(k in name_lower for k in ("delete", "remove")):
+                        method = "DELETE"
+                    elif any(k in name_lower for k in ("update", "put", "edit")):
+                        method = "PUT"
+                    else:
+                        method = "POST"  # default for create/handle/webhook/etc.
+                    old = match.group(0)
+                    new = old.replace(f"function {fn_name}(", f"function {method}(")
+                    modified = modified.replace(old, new, 1)
+                    changed = True
+                    emit("mayor", "TASK_STARTED",
+                         f"Fixed route export: {fn_name} → {method} in "
+                         f"{os.path.relpath(fpath, project_dir)}")
+
+            if changed:
+                with open(fpath, "w") as f:
+                    f.write(modified)
 
 
 def build_project(description):
