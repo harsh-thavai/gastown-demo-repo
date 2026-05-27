@@ -633,16 +633,18 @@ class TestFixNextAuthRoutes(unittest.TestCase):
         self.assertIn("handlers", content)
         self.assertIn("export const { GET, POST } = handlers", content)
 
-    def test_leaves_correct_v5_pattern_alone(self):
+    def test_always_writes_canonical_v5_handler(self):
+        """Any nextauth route is always rewritten to the canonical v5 exports."""
         route_path = "src/app/api/auth/nextauth/route.ts"
-        correct = "import { handlers } from '@/auth';\nexport const { GET, POST } = handlers;\n"
-        self._write(route_path, correct)
+        existing = "import { handlers } from '@/auth';\nexport const { GET, POST } = handlers;\n"
+        self._write(route_path, existing)
         with patch("orchestrator.requests.post"):
             orc._fix_nextauth_routes(self.tmp)
         full = os.path.join(self.tmp, route_path)
         with open(full) as f:
             content = f.read()
-        self.assertEqual(content, correct)
+        self.assertIn("import { handlers } from '@/auth'", content)
+        self.assertIn("export const { GET, POST } = handlers", content)
 
     def test_ignores_non_nextauth_routes(self):
         route_path = "src/app/api/stripe/route.ts"

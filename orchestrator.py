@@ -443,6 +443,7 @@ def _bootstrap_nextjs(project_dir, project_name):
         "vercel.json": json.dumps({
             "buildCommand": "npm run build",
             "framework": "nextjs",
+            "regions": ["bom1"],
         }, indent=2),
         "src/app/globals.css": (
             "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n"
@@ -545,7 +546,7 @@ def _vercel_deploy_api(project_name, project_dir):
     try:
         result = subprocess.run(
             ["vercel", "--prod", "--yes", "--name", project_name,
-             "--token", VERCEL_TOKEN],
+             "--token", VERCEL_TOKEN, "--regions", "bom1"],
             cwd=project_dir, capture_output=True, text=True, timeout=300,
         )
         output = result.stdout + result.stderr
@@ -562,6 +563,7 @@ def _vercel_deploy_api(project_name, project_dir):
     payload = {
         "name": project_name,
         "target": "production",
+        "regions": ["bom1"],
         "gitSource": {
             "type": "github",
             "repoId": os.environ.get("GITHUB_REPO_ID", ""),
@@ -739,23 +741,31 @@ def _fix_missing_deps(project_dir):
         except subprocess.TimeoutExpired:
             emit("mayor", "TASK_STARTED", "npm install timed out — proceeding")
 
+    # Fix NextAuth v5 route handlers FIRST — this rewrites imports
+    # so the subsequent scan creates correct stubs
+    _fix_nextauth_routes(project_dir)
+
+    # Always ensure src/auth.ts exists (NextAuth v5 root config)
+    auth_stub = os.path.join(project_dir, "src", "auth.ts")
+    if not os.path.exists(auth_stub):
+        os.makedirs(os.path.dirname(auth_stub), exist_ok=True)
+        with open(auth_stub, "w") as f:
+            f.write(STATIC_STUBS["src/auth.ts"])
+        emit("mayor", "TASK_STARTED", "Created stub: src/auth.ts")
+        # Re-scan local_needs now that routes have been fixed
+        local_needs.pop("src/auth", None)  # remove stale entry
+
     # Create stubs for missing local paths
     for rel_no_ext, info in local_needs.items():
         stub_path = rel_no_ext + ".ts"
         full = os.path.join(project_dir, stub_path)
         if os.path.exists(full):
             continue
-        # Use static stub if available
-        content = STATIC_STUBS.get(stub_path)
-        if not content:
-            content = _generate_stub(rel_no_ext, info)
+        content = STATIC_STUBS.get(stub_path) or _generate_stub(rel_no_ext, info)
         os.makedirs(os.path.dirname(full) or ".", exist_ok=True)
         with open(full, "w") as f:
             f.write(content)
         emit("mayor", "TASK_STARTED", f"Created stub: {stub_path}")
-
-    # Fix NextAuth v5 route handlers
-    _fix_nextauth_routes(project_dir)
 
 
 def _process_import(imp, names, kind, project_dir, local_needs, missing_pkgs, KNOWN_PKGS):
@@ -806,49 +816,38 @@ def _generate_stub(rel_no_ext, info):
 
 def _fix_nextauth_routes(project_dir):
     """
-    NextAuth v5 route handlers must export GET and POST from handlers.
-    Fix any route.ts that looks like a NextAuth handler but uses v4 pattern.
+    Always overwrite any [...nextauth]/route.ts with the correct NextAuth v5 pattern.
+    The correct pattern is always: import { handlers } from '@/auth'; export const { GET, POST } = handlers;
+    No conditions — any existing content in these files is replaced.
     """
+    correct = (
+        "// Auto-fixed by Gas Town — NextAuth v5 handler\n"
+        "import { handlers } from '@/auth';\n"
+        "export const { GET, POST } = handlers;\n"
+    )
     for root, _, files in os.walk(project_dir):
         if "node_modules" in root or ".next" in root:
             continue
         for fname in files:
             if fname not in ("route.ts", "route.tsx"):
                 continue
-            # Match any auth-related route (handles [...nextauth], [nextauth], etc.)
-            root_lower = root.lower().replace("\\", "/")
-            is_auth_route = (
-                "nextauth" in root_lower
-                or ("auth" in root_lower and "api" in root_lower)
-            )
-            if not is_auth_route:
+            root_norm = root.lower().replace("\\", "/")
+            if "nextauth" not in root_norm and not (
+                "auth" in root_norm and "api" in root_norm
+            ):
                 continue
             fpath = os.path.join(root, fname)
             try:
                 with open(fpath) as f:
-                    content = f.read()
+                    existing = f.read()
             except Exception:
+                existing = ""
+            if existing.strip() == correct.strip():
                 continue
-            # Already correct v5 pattern
-            if "handlers" in content and "export const { GET, POST }" in content:
-                continue
-            # Detect v4 or broken patterns
-            is_v4 = (
-                "export default NextAuth" in content
-                or "export default handler" in content
-                or ("import NextAuth from" in content and "handlers" not in content)
-                or ("export { GET, POST }" in content and "handlers" not in content)
-            )
-            if is_v4:
-                correct = (
-                    "// Auto-fixed by Gas Town — NextAuth v5 handler\n"
-                    "import { handlers } from '@/auth';\n"
-                    "export const { GET, POST } = handlers;\n"
-                )
-                with open(fpath, "w") as f:
-                    f.write(correct)
-                emit("mayor", "TASK_STARTED",
-                     f"Fixed NextAuth v5 route: {os.path.relpath(fpath, project_dir)}")
+            with open(fpath, "w") as f:
+                f.write(correct)
+            emit("mayor", "TASK_STARTED",
+                 f"Fixed NextAuth v5 route: {os.path.relpath(fpath, project_dir)}")
 
 
 def build_project(description):
