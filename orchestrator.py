@@ -391,7 +391,7 @@ def _bootstrap_nextjs(project_dir, project_name):
                 "lint":  "next lint",
             },
             "dependencies": {
-                "next": "15.3.2", "react": "^19", "react-dom": "^19",
+                "next": "15.3.6", "react": "^19", "react-dom": "^19",
                 "next-auth": "^5.0.0-beta.28",
                 "lucide-react": "^0.511.0",
                 "stripe": "^17.7.0",
@@ -613,66 +613,87 @@ def deploy_new_project(project_dir, project_name):
 
 def _fix_missing_deps(project_dir):
     """
-    After agents write files, scan every .ts/.tsx for imports.
-    1. Install missing external npm packages.
-    2. Create stub files for missing local @/lib/* paths.
+    After agents write files:
+    1. Scan every .ts/.tsx for imports, install missing npm packages.
+    2. Create stubs for missing local @/* paths with correct named exports.
+    3. Fix broken NextAuth v5 route handlers.
     """
     import re as _re
 
-    # Known npm package name mappings (import path → npm package)
+    # npm package mapping: import-path-prefix → npm install name
     KNOWN_PKGS = {
-        "next-auth":             "next-auth@^5.0.0-beta.28",
-        "next-auth/react":       "next-auth@^5.0.0-beta.28",
-        "next-auth/providers":   "next-auth@^5.0.0-beta.28",
-        "lucide-react":          "lucide-react",
-        "stripe":                "stripe",
-        "@stripe/stripe-js":     "@stripe/stripe-js",
-        "zod":                   "zod",
-        "clsx":                  "clsx",
-        "tailwind-merge":        "tailwind-merge",
-        "drizzle-orm":           "drizzle-orm",
-        "@radix-ui/react-dialog":"@radix-ui/react-dialog",
-        "@radix-ui/react-label": "@radix-ui/react-label",
-        "react-hook-form":       "react-hook-form",
-        "@hookform/resolvers":   "@hookform/resolvers",
-        "sonner":                "sonner",
-        "date-fns":              "date-fns",
+        "next-auth":               "next-auth@^5.0.0-beta.28",
+        "next-auth/react":         "next-auth@^5.0.0-beta.28",
+        "next-auth/providers":     "next-auth@^5.0.0-beta.28",
+        "lucide-react":            "lucide-react",
+        "stripe":                  "stripe",
+        "@stripe/stripe-js":       "@stripe/stripe-js",
+        "zod":                     "zod",
+        "clsx":                    "clsx",
+        "tailwind-merge":          "tailwind-merge",
+        "drizzle-orm":             "drizzle-orm",
+        "drizzle-orm/pg-core":     "drizzle-orm",
+        "drizzle-orm/sqlite-core": "drizzle-orm",
+        "@radix-ui/react-dialog":  "@radix-ui/react-dialog",
+        "@radix-ui/react-label":   "@radix-ui/react-label",
+        "@radix-ui/react-slot":    "@radix-ui/react-slot",
+        "react-hook-form":         "react-hook-form",
+        "@hookform/resolvers":     "@hookform/resolvers",
+        "sonner":                  "sonner",
+        "date-fns":                "date-fns",
+        "class-variance-authority":"class-variance-authority",
+        "prisma":                  "@prisma/client",
+        "@prisma/client":          "@prisma/client",
     }
 
-    # Stub templates for common local lib files
-    LIB_STUBS = {
-        "src/lib/db/index.ts": (
-            "// stub — replace with real DB client\n"
-            "export const db = {} as any;\n"
-        ),
-        "src/lib/db/schema.ts": (
-            "// stub — replace with real schema\n"
-            "export const users = {} as any;\n"
-            "export const subscriptions = {} as any;\n"
+    # Well-known local lib stubs (full content)
+    STATIC_STUBS = {
+        "src/auth.ts": (
+            "import NextAuth from 'next-auth';\n"
+            "export const { handlers, auth, signIn, signOut } = "
+            "NextAuth({ providers: [] });\n"
         ),
         "src/lib/auth.ts": (
             "import NextAuth from 'next-auth';\n"
-            "export const { handlers, auth, signIn, signOut } = NextAuth({ providers: [] });\n"
+            "export const { handlers, auth, signIn, signOut } = "
+            "NextAuth({ providers: [] });\n"
         ),
         "src/lib/stripe.ts": (
             "import Stripe from 'stripe';\n"
-            "export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', "
+            "export const stripe = new Stripe("
+            "process.env.STRIPE_SECRET_KEY ?? '', "
             "{ apiVersion: '2024-12-18.acacia' });\n"
         ),
         "src/lib/utils.ts": (
             "import { clsx, type ClassValue } from 'clsx';\n"
             "import { twMerge } from 'tailwind-merge';\n"
-            "export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }\n"
+            "export function cn(...inputs: ClassValue[]) "
+            "{ return twMerge(clsx(inputs)); }\n"
+        ),
+        "src/lib/prisma.ts": (
+            "import { PrismaClient } from '@prisma/client';\n"
+            "const globalForPrisma = globalThis as unknown as "
+            "{ prisma: PrismaClient };\n"
+            "export const prisma = globalForPrisma.prisma ?? new PrismaClient();\n"
+            "if (process.env.NODE_ENV !== 'production') "
+            "globalForPrisma.prisma = prisma;\n"
         ),
     }
 
-    # Scan all TypeScript files for imports
-    missing_pkgs = set()
-    missing_local = set()
-    import_re = _re.compile(r"""from\s+['"]([^'"]+)['"]""")
+    # Regex to parse: import { a, b as c } from 'path'
+    # and: import Default from 'path'
+    # and: import * as NS from 'path'
+    named_re   = _re.compile(r"import\s*\{([^}]+)\}\s*from\s*['\"]([^'\"]+)['\"]")
+    default_re = _re.compile(r"import\s+(\w+)\s*from\s*['\"]([^'\"]+)['\"]")
+    star_re    = _re.compile(r"import\s*\*\s*as\s+(\w+)\s*from\s*['\"]([^'\"]+)['\"]")
+    path_re    = _re.compile(r"""from\s+['"]([^'"]+)['"]""")
+
+    # Collect: local_path → set of named exports needed
+    local_needs: dict = {}
+    missing_pkgs: set = set()
 
     for root, _, files in os.walk(project_dir):
-        if "node_modules" in root:
+        if "node_modules" in root or ".next" in root:
             continue
         for fname in files:
             if not fname.endswith((".ts", ".tsx")):
@@ -683,30 +704,33 @@ def _fix_missing_deps(project_dir):
                     src = f.read()
             except Exception:
                 continue
-            for imp in import_re.findall(src):
-                if imp.startswith("@/") or imp.startswith("~/"):
-                    # Local alias — check if file exists
-                    rel = imp.replace("@/", "src/").replace("~/", "src/")
-                    for ext in ("", ".ts", ".tsx", "/index.ts", "/index.tsx"):
-                        if os.path.exists(os.path.join(project_dir, rel + ext)):
-                            break
-                    else:
-                        missing_local.add(rel)
-                elif not imp.startswith("."):
-                    # External package — get root package name
-                    pkg_root = imp.split("/")[0]
-                    if pkg_root.startswith("@"):
-                        pkg_root = "/".join(imp.split("/")[:2])
-                    nm = os.path.join(project_dir, "node_modules", pkg_root)
-                    if not os.path.exists(nm):
-                        npm_name = KNOWN_PKGS.get(imp) or KNOWN_PKGS.get(pkg_root) or pkg_root
-                        missing_pkgs.add(npm_name)
+
+            # Named imports
+            for match in named_re.finditer(src):
+                names_raw, imp = match.group(1), match.group(2)
+                names = [n.split(" as ")[0].strip() for n in names_raw.split(",")
+                         if n.strip() and not n.strip().startswith("type ")]
+                _process_import(imp, names, "named",
+                                project_dir, local_needs, missing_pkgs, KNOWN_PKGS)
+
+            # Default imports
+            for match in default_re.finditer(src):
+                name, imp = match.group(1), match.group(2)
+                if not any(named_re.search(f"{{ {name} }} from '{imp}'") for _ in [1]):
+                    _process_import(imp, [name], "default",
+                                    project_dir, local_needs, missing_pkgs, KNOWN_PKGS)
+
+            # Star imports
+            for match in star_re.finditer(src):
+                name, imp = match.group(1), match.group(2)
+                _process_import(imp, [name], "star",
+                                 project_dir, local_needs, missing_pkgs, KNOWN_PKGS)
 
     # Install missing npm packages
     if missing_pkgs:
         pkg_list = sorted(missing_pkgs)
         emit("mayor", "TASK_STARTED",
-             f"Installing {len(pkg_list)} missing packages: {', '.join(pkg_list)}")
+             f"Installing {len(pkg_list)} missing pkgs: {', '.join(pkg_list)}")
         try:
             subprocess.run(
                 ["npm", "install", "--no-audit", "--no-fund"] + pkg_list,
@@ -715,19 +739,116 @@ def _fix_missing_deps(project_dir):
         except subprocess.TimeoutExpired:
             emit("mayor", "TASK_STARTED", "npm install timed out — proceeding")
 
-    # Create stub files for missing local paths
-    for rel in missing_local:
-        stub_key = rel + ".ts"
-        content = LIB_STUBS.get(stub_key) or LIB_STUBS.get(rel + "/index.ts")
+    # Create stubs for missing local paths
+    for rel_no_ext, info in local_needs.items():
+        stub_path = rel_no_ext + ".ts"
+        full = os.path.join(project_dir, stub_path)
+        if os.path.exists(full):
+            continue
+        # Use static stub if available
+        content = STATIC_STUBS.get(stub_path)
         if not content:
-            # Generic stub
-            content = f"// auto-stub for {rel}\nexport {{}};\n"
-        full = os.path.join(project_dir, stub_key)
-        if not os.path.exists(full):
-            os.makedirs(os.path.dirname(full), exist_ok=True)
-            with open(full, "w") as f:
-                f.write(content)
-            emit("mayor", "TASK_STARTED", f"Created stub: {stub_key}")
+            content = _generate_stub(rel_no_ext, info)
+        os.makedirs(os.path.dirname(full) or ".", exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+        emit("mayor", "TASK_STARTED", f"Created stub: {stub_path}")
+
+    # Fix NextAuth v5 route handlers
+    _fix_nextauth_routes(project_dir)
+
+
+def _process_import(imp, names, kind, project_dir, local_needs, missing_pkgs, KNOWN_PKGS):
+    """Classify an import as local or external and record it."""
+    if imp.startswith("@/") or imp.startswith("~/"):
+        rel = imp.replace("@/", "src/").replace("~/", "")
+        # Check if file exists with any extension
+        for ext in ("", ".ts", ".tsx", "/index.ts", "/index.tsx"):
+            if os.path.exists(os.path.join(project_dir, rel + ext)):
+                return  # already exists
+        if rel not in local_needs:
+            local_needs[rel] = {"named": set(), "default": None, "star": False}
+        if kind == "named":
+            local_needs[rel]["named"].update(names)
+        elif kind == "default":
+            local_needs[rel]["default"] = names[0] if names else "Default"
+        elif kind == "star":
+            local_needs[rel]["star"] = True
+    elif not imp.startswith("."):
+        # External package
+        parts = imp.split("/")
+        pkg_root = parts[0] if not parts[0].startswith("@") else "/".join(parts[:2])
+        nm = os.path.join(project_dir, "node_modules", parts[0])
+        if not os.path.exists(nm):
+            npm_name = KNOWN_PKGS.get(imp) or KNOWN_PKGS.get(pkg_root) or pkg_root
+            missing_pkgs.add(npm_name)
+
+
+def _generate_stub(rel_no_ext, info):
+    """Generate TypeScript stub content based on what's imported from a path."""
+    lines = [f"// auto-generated stub for {rel_no_ext}"]
+    named = info.get("named", set())
+    default_name = info.get("default")
+    has_star = info.get("star", False)
+
+    for name in sorted(named):
+        lines.append(f"export const {name}: any = {{}} as any;")
+
+    if default_name:
+        lines.append(f"const {default_name}: any = {{}} as any;")
+        lines.append(f"export default {default_name};")
+    elif not named:
+        # No specific imports detected — export a catch-all
+        lines.append("export default {} as any;")
+
+    return "\n".join(lines) + "\n"
+
+
+def _fix_nextauth_routes(project_dir):
+    """
+    NextAuth v5 route handlers must export GET and POST from handlers.
+    Fix any route.ts that looks like a NextAuth handler but uses v4 pattern.
+    """
+    for root, _, files in os.walk(project_dir):
+        if "node_modules" in root or ".next" in root:
+            continue
+        for fname in files:
+            if fname not in ("route.ts", "route.tsx"):
+                continue
+            # Match any auth-related route (handles [...nextauth], [nextauth], etc.)
+            root_lower = root.lower().replace("\\", "/")
+            is_auth_route = (
+                "nextauth" in root_lower
+                or ("auth" in root_lower and "api" in root_lower)
+            )
+            if not is_auth_route:
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath) as f:
+                    content = f.read()
+            except Exception:
+                continue
+            # Already correct v5 pattern
+            if "handlers" in content and "export const { GET, POST }" in content:
+                continue
+            # Detect v4 or broken patterns
+            is_v4 = (
+                "export default NextAuth" in content
+                or "export default handler" in content
+                or ("import NextAuth from" in content and "handlers" not in content)
+                or ("export { GET, POST }" in content and "handlers" not in content)
+            )
+            if is_v4:
+                correct = (
+                    "// Auto-fixed by Gas Town — NextAuth v5 handler\n"
+                    "import { handlers } from '@/auth';\n"
+                    "export const { GET, POST } = handlers;\n"
+                )
+                with open(fpath, "w") as f:
+                    f.write(correct)
+                emit("mayor", "TASK_STARTED",
+                     f"Fixed NextAuth v5 route: {os.path.relpath(fpath, project_dir)}")
 
 
 def build_project(description):

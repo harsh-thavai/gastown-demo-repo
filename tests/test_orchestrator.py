@@ -470,9 +470,7 @@ class TestFixMissingDeps(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        # Minimal Next.js structure
-        src_app = os.path.join(self.tmp, "src", "app")
-        os.makedirs(src_app, exist_ok=True)
+        os.makedirs(os.path.join(self.tmp, "src", "app"), exist_ok=True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -491,22 +489,72 @@ class TestFixMissingDeps(unittest.TestCase):
             mock_run.return_value = MagicMock(returncode=0)
             orc._fix_missing_deps(self.tmp)
         calls = [str(c) for c in mock_run.call_args_list]
-        self.assertTrue(any("lucide-react" in c for c in calls),
-                        "lucide-react should have been installed")
+        self.assertTrue(any("lucide-react" in c for c in calls))
 
-    def test_creates_missing_lib_stub(self):
+    def test_creates_stub_with_correct_named_export(self):
+        """Stub must export the exact name that was imported."""
         self._write("src/app/dashboard/page.tsx",
                     "import { db } from '@/lib/db';\nexport default function D(){}")
-        with patch("orchestrator.subprocess.run",
-                   return_value=MagicMock(returncode=0)), \
+        with patch("orchestrator.subprocess.run", return_value=MagicMock(returncode=0)), \
              patch("orchestrator.requests.post"):
             orc._fix_missing_deps(self.tmp)
         stub = os.path.join(self.tmp, "src", "lib", "db.ts")
-        self.assertTrue(os.path.exists(stub),
-                        "src/lib/db.ts stub should have been created")
+        self.assertTrue(os.path.exists(stub))
+        with open(stub) as f:
+            content = f.read()
+        self.assertIn("export", content)
+        self.assertIn("db", content)
+
+    def test_creates_stub_for_at_db_path(self):
+        """@/db (not @/lib/db) must also get a stub."""
+        self._write("src/app/api/route.ts",
+                    "import { db } from '@/db';\nexport async function GET(){}")
+        with patch("orchestrator.subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("orchestrator.requests.post"):
+            orc._fix_missing_deps(self.tmp)
+        stub = os.path.join(self.tmp, "src", "db.ts")
+        self.assertTrue(os.path.exists(stub))
+
+    def test_creates_stub_for_at_db_schema(self):
+        """@/db/schema must get a stub exporting usersTable."""
+        self._write("src/app/api/route.ts",
+                    "import { usersTable } from '@/db/schema';\nexport async function GET(){}")
+        with patch("orchestrator.subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("orchestrator.requests.post"):
+            orc._fix_missing_deps(self.tmp)
+        stub = os.path.join(self.tmp, "src", "db", "schema.ts")
+        self.assertTrue(os.path.exists(stub))
+        with open(stub) as f:
+            content = f.read()
+        self.assertIn("usersTable", content)
+
+    def test_creates_prisma_stub_with_prisma_export(self):
+        """@/lib/prisma stub must export 'prisma'."""
+        self._write("src/app/api/route.ts",
+                    "import { prisma } from '@/lib/prisma';\nexport async function GET(){}")
+        with patch("orchestrator.subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("orchestrator.requests.post"):
+            orc._fix_missing_deps(self.tmp)
+        stub = os.path.join(self.tmp, "src", "lib", "prisma.ts")
+        self.assertTrue(os.path.exists(stub))
+        with open(stub) as f:
+            content = f.read()
+        self.assertIn("prisma", content)
+
+    def test_creates_env_stub(self):
+        """@/lib/env must get a stub exporting env."""
+        self._write("src/app/api/route.ts",
+                    "import { env } from '@/lib/env';\nexport async function GET(){}")
+        with patch("orchestrator.subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("orchestrator.requests.post"):
+            orc._fix_missing_deps(self.tmp)
+        stub = os.path.join(self.tmp, "src", "lib", "env.ts")
+        self.assertTrue(os.path.exists(stub))
+        with open(stub) as f:
+            content = f.read()
+        self.assertIn("env", content)
 
     def test_does_not_reinstall_existing_package(self):
-        # Create a fake node_modules/lucide-react dir
         nm = os.path.join(self.tmp, "node_modules", "lucide-react")
         os.makedirs(nm)
         self._write("src/app/page.tsx",
@@ -515,17 +563,15 @@ class TestFixMissingDeps(unittest.TestCase):
              patch("orchestrator.requests.post"):
             mock_run.return_value = MagicMock(returncode=0)
             orc._fix_missing_deps(self.tmp)
-        # npm install should NOT have been called with lucide-react
         for c in mock_run.call_args_list:
             args = c[0][0] if c[0] else []
             if "install" in args:
                 self.assertNotIn("lucide-react", args)
 
-    def test_creates_lib_utils_stub(self):
+    def test_creates_lib_utils_stub_with_cn(self):
         self._write("src/app/page.tsx",
                     "import { cn } from '@/lib/utils';\nexport default function P(){}")
-        with patch("orchestrator.subprocess.run",
-                   return_value=MagicMock(returncode=0)), \
+        with patch("orchestrator.subprocess.run", return_value=MagicMock(returncode=0)), \
              patch("orchestrator.requests.post"):
             orc._fix_missing_deps(self.tmp)
         stub = os.path.join(self.tmp, "src", "lib", "utils.ts")
@@ -545,7 +591,6 @@ class TestFixMissingDeps(unittest.TestCase):
         self.assertTrue(any("radix-ui" in c for c in calls))
 
     def test_skips_node_modules(self):
-        """Should not scan node_modules."""
         nm_file = os.path.join(self.tmp, "node_modules", "some-pkg", "index.ts")
         os.makedirs(os.path.dirname(nm_file))
         with open(nm_file, "w") as f:
@@ -558,6 +603,57 @@ class TestFixMissingDeps(unittest.TestCase):
             args = c[0][0] if c[0] else []
             if "install" in args:
                 self.assertNotIn("unknown-pkg-xyz", args)
+
+
+class TestFixNextAuthRoutes(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write(self, rel_path, content):
+        full = os.path.join(self.tmp, rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+        return full
+
+    def test_fixes_broken_nextauth_v4_pattern(self):
+        # Use nextauth (no brackets) — brackets are a Linux-only path feature
+        route_path = "src/app/api/auth/nextauth/route.ts"
+        self._write(route_path,
+                    "import NextAuth from 'next-auth';\nexport default NextAuth({});")
+        with patch("orchestrator.requests.post"):
+            orc._fix_nextauth_routes(self.tmp)
+        full = os.path.join(self.tmp, route_path)
+        with open(full) as f:
+            content = f.read()
+        self.assertIn("handlers", content)
+        self.assertIn("export const { GET, POST } = handlers", content)
+
+    def test_leaves_correct_v5_pattern_alone(self):
+        route_path = "src/app/api/auth/nextauth/route.ts"
+        correct = "import { handlers } from '@/auth';\nexport const { GET, POST } = handlers;\n"
+        self._write(route_path, correct)
+        with patch("orchestrator.requests.post"):
+            orc._fix_nextauth_routes(self.tmp)
+        full = os.path.join(self.tmp, route_path)
+        with open(full) as f:
+            content = f.read()
+        self.assertEqual(content, correct)
+
+    def test_ignores_non_nextauth_routes(self):
+        route_path = "src/app/api/stripe/route.ts"
+        original = "export async function POST(req: Request) { return Response.json({}) }\n"
+        self._write(route_path, original)
+        with patch("orchestrator.requests.post"):
+            orc._fix_nextauth_routes(self.tmp)
+        full = os.path.join(self.tmp, route_path)
+        with open(full) as f:
+            content = f.read()
+        self.assertEqual(content, original)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
