@@ -634,18 +634,38 @@ def _fix_missing_deps(project_dir):
         "clsx":                    "clsx",
         "tailwind-merge":          "tailwind-merge",
         "drizzle-orm":             "drizzle-orm",
-        "drizzle-orm/pg-core":     "drizzle-orm",
-        "drizzle-orm/sqlite-core": "drizzle-orm",
-        "@radix-ui/react-dialog":  "@radix-ui/react-dialog",
-        "@radix-ui/react-label":   "@radix-ui/react-label",
-        "@radix-ui/react-slot":    "@radix-ui/react-slot",
-        "react-hook-form":         "react-hook-form",
-        "@hookform/resolvers":     "@hookform/resolvers",
-        "sonner":                  "sonner",
-        "date-fns":                "date-fns",
-        "class-variance-authority":"class-variance-authority",
-        "prisma":                  "@prisma/client",
-        "@prisma/client":          "@prisma/client",
+        "drizzle-orm/pg-core":             "drizzle-orm",
+        "drizzle-orm/sqlite-core":         "drizzle-orm",
+        "@radix-ui/react-dialog":          "@radix-ui/react-dialog",
+        "@radix-ui/react-label":           "@radix-ui/react-label",
+        "@radix-ui/react-slot":            "@radix-ui/react-slot",
+        "@radix-ui/react-dropdown-menu":   "@radix-ui/react-dropdown-menu",
+        "@radix-ui/react-avatar":          "@radix-ui/react-avatar",
+        "@radix-ui/react-tabs":            "@radix-ui/react-tabs",
+        "react-hook-form":                 "react-hook-form",
+        "@hookform/resolvers":             "@hookform/resolvers",
+        "@hookform/resolvers/zod":         "@hookform/resolvers",
+        "sonner":                          "sonner",
+        "date-fns":                        "date-fns",
+        "class-variance-authority":        "class-variance-authority",
+        "prisma":                          "@prisma/client",
+        "@prisma/client":                  "@prisma/client",
+        "bcryptjs":                        "bcryptjs",
+        "bcrypt":                          "bcrypt",
+        "jsonwebtoken":                    "jsonwebtoken",
+        "jose":                            "jose",
+        "nodemailer":                      "nodemailer",
+        "resend":                          "resend",
+        "@supabase/supabase-js":           "@supabase/supabase-js",
+        "@supabase/auth-helpers-nextjs":   "@supabase/auth-helpers-nextjs",
+        "@supabase/ssr":                   "@supabase/ssr",
+        "axios":                           "axios",
+        "swr":                             "swr",
+        "@tanstack/react-query":           "@tanstack/react-query",
+        "framer-motion":                   "framer-motion",
+        "recharts":                        "recharts",
+        "react-hot-toast":                 "react-hot-toast",
+        "react-toastify":                  "react-toastify",
     }
 
     # Well-known local lib stubs (full content)
@@ -816,38 +836,47 @@ def _generate_stub(rel_no_ext, info):
 
 def _fix_nextauth_routes(project_dir):
     """
-    Always overwrite any [...nextauth]/route.ts with the correct NextAuth v5 pattern.
-    The correct pattern is always: import { handlers } from '@/auth'; export const { GET, POST } = handlers;
-    No conditions — any existing content in these files is replaced.
+    Scan every route.ts/route.tsx for NextAuth patterns in the FILE CONTENT
+    (not path — path detection is unreliable on different OS/agents).
+    Overwrite any file that imports from next-auth with the correct v5 handler.
     """
     correct = (
         "// Auto-fixed by Gas Town — NextAuth v5 handler\n"
         "import { handlers } from '@/auth';\n"
         "export const { GET, POST } = handlers;\n"
     )
+    # Content patterns that indicate this is a NextAuth route handler
+    nextauth_signals = [
+        "next-auth",
+        "NextAuth",
+        "from '@/auth'",
+        "from '@/lib/auth'",
+        "authOptions",
+    ]
     for root, _, files in os.walk(project_dir):
         if "node_modules" in root or ".next" in root:
             continue
         for fname in files:
             if fname not in ("route.ts", "route.tsx"):
                 continue
-            root_norm = root.lower().replace("\\", "/")
-            if "nextauth" not in root_norm and not (
-                "auth" in root_norm and "api" in root_norm
-            ):
-                continue
             fpath = os.path.join(root, fname)
             try:
                 with open(fpath) as f:
                     existing = f.read()
             except Exception:
-                existing = ""
-            if existing.strip() == correct.strip():
                 continue
-            with open(fpath, "w") as f:
-                f.write(correct)
-            emit("mayor", "TASK_STARTED",
-                 f"Fixed NextAuth v5 route: {os.path.relpath(fpath, project_dir)}")
+            # Skip if already exactly our canonical version
+            if "export const { GET, POST } = handlers" in existing \
+                    and "from '@/auth'" in existing \
+                    and "bcryptjs" not in existing \
+                    and "prisma" not in existing:
+                continue
+            # Fix if any nextauth signal is present
+            if any(sig in existing for sig in nextauth_signals):
+                with open(fpath, "w") as f:
+                    f.write(correct)
+                emit("mayor", "TASK_STARTED",
+                     f"Fixed NextAuth v5 route: {os.path.relpath(fpath, project_dir)}")
 
 
 def build_project(description):
@@ -857,6 +886,12 @@ def build_project(description):
     project_name = plan.get("project_name", "gastown-project")
     framework    = plan.get("framework", "nextjs")
     project_dir  = os.path.expanduser(f"~/gastown/builds/{project_name}")
+
+    # Always start fresh — stale files from previous runs cause build failures
+    import shutil as _shutil
+    if not DRY_RUN and os.path.exists(project_dir):
+        _shutil.rmtree(project_dir)
+        emit("mayor", "TASK_STARTED", f"Cleaned old build: {project_dir}")
     os.makedirs(project_dir, exist_ok=True)
 
     emit("mayor", "TASK_STARTED",
