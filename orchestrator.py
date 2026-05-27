@@ -136,10 +136,44 @@ def generate_file_content(agent_name, task, target_file, framework, context=""):
                 ".py":"python",".md":"markdown"}.get(ext.lstrip("."),"text")
         return f"// [dry-run] {agent_name} — {target_file}\n// Task: {task}\nexport default function Placeholder() {{ return null; }}\n"
 
+    # Detect file type to add UI-specific instructions
+    is_page    = target_file.endswith(("page.tsx", "page.jsx", "page.ts"))
+    is_layout  = "layout" in target_file
+    is_route   = "route.ts" in target_file or "route.tsx" in target_file
+    is_python  = target_file.endswith(".py")
+    is_html    = target_file.endswith(".html")
+
+    if is_page:
+        ui_note = (
+            "\nCRITICAL: This is a React PAGE component that users will SEE in the browser.\n"
+            "You MUST return a full page with:\n"
+            "- Beautiful, functional UI using Tailwind CSS classes\n"
+            "- Real interactive elements (forms, buttons, inputs, cards)\n"
+            "- Responsive layout (mobile + desktop)\n"
+            "- Proper headings, colors, spacing\n"
+            "- NO placeholder text like 'Coming soon' or 'TODO'\n"
+            "The user will open this in a browser — make it look professional.\n"
+        )
+    elif is_python or is_html:
+        ui_note = (
+            "\nCRITICAL: Users will open this in a browser.\n"
+            "Include a complete, beautiful HTML UI with CSS styling.\n"
+            "Use modern design — gradient backgrounds, cards, proper typography.\n"
+            "Make all functionality actually work (JavaScript for interactivity).\n"
+        )
+    elif is_route:
+        ui_note = (
+            "\nIMPORTANT: This is a Next.js App Router API route.\n"
+            "ONLY export HTTP method handlers: GET, POST, PUT, DELETE, PATCH.\n"
+            "NEVER export functions with other names — they cause build failures.\n"
+        )
+    else:
+        ui_note = ""
+
     system = f"""You are {agent_name}, a senior {framework} engineer.
 Output ONLY the complete file content for {target_file}.
 Do NOT include explanations, markdown fences, or commentary.
-Output raw code only — exactly what should be written to disk."""
+Output raw code only — exactly what should be written to disk.{ui_note}"""
 
     user = f"""Task: {task}
 File: {target_file}
@@ -317,10 +351,15 @@ Respond ONLY with valid JSON, no markdown fences:
     }
   ]
 }
-Rules: max one task per agent. polecat-auth builds auth.
-polecat-tests writes tests. polecat-debug does security review.
-polecat-docs writes README. polecat-review does final polish.
-For nextjs use paths like src/app/auth/login/page.tsx"""
+Rules:
+- Max one task per agent.
+- polecat-auth: builds auth pages WITH complete UI (login form, register form — real Tailwind CSS UI)
+- polecat-tests: writes tests
+- polecat-debug: security review
+- polecat-docs: writes README
+- polecat-review: builds the MAIN dashboard page (src/app/dashboard/page.tsx) with full UI — charts, cards, stats, navigation
+- For nextjs: file paths must be src/app/something/page.tsx for pages
+- EVERY page file must have a complete visual UI — no placeholder text"""
 
     raw = call_do_inference(system, f"Project description:\n{description}")
     raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
@@ -1009,11 +1048,71 @@ def build_project(description):
 
 
 def _bootstrap_fastapi(project_dir, project_name):
+    display_name = project_name.replace("-", " ").title()
     files = {
         "main.py": (
-            "from fastapi import FastAPI\n\n"
-            "app = FastAPI(title='" + project_name + "')\n\n"
-            "@app.get('/')\ndef root():\n    return {'status': 'ok', 'project': '" + project_name + "'}\n"
+            "from fastapi import FastAPI\n"
+            "from fastapi.responses import HTMLResponse\n\n"
+            f"app = FastAPI(title='{display_name}')\n\n"
+            "HTML = \"\"\"\n"
+            "<!DOCTYPE html><html lang='en'><head>\n"
+            "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>\n"
+            f"<title>{display_name}</title>\n"
+            "<style>\n"
+            "  *{box-sizing:border-box;margin:0;padding:0}\n"
+            "  body{font-family:'Inter',system-ui,sans-serif;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff}\n"
+            "  .card{background:rgba(255,255,255,.08);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:40px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.4)}\n"
+            "  h1{font-size:1.8rem;font-weight:700;margin-bottom:8px;background:linear-gradient(90deg,#a78bfa,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}\n"
+            "  p{color:rgba(255,255,255,.6);margin-bottom:24px;font-size:.95rem}\n"
+            "  .display{background:rgba(0,0,0,.4);border-radius:12px;padding:20px;font-size:2.5rem;text-align:right;margin-bottom:16px;font-family:monospace;min-height:72px;word-break:break-all}\n"
+            "  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}\n"
+            "  button{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;font-size:1.2rem;padding:18px;border-radius:10px;cursor:pointer;transition:all .15s;font-weight:500}\n"
+            "  button:hover{background:rgba(255,255,255,.2);transform:translateY(-1px)}\n"
+            "  .btn-op{background:rgba(167,139,250,.25);border-color:rgba(167,139,250,.4)}\n"
+            "  .btn-eq{background:linear-gradient(135deg,#a78bfa,#38bdf8);border:none;grid-column:span 2}\n"
+            "  .btn-clear{background:rgba(248,113,113,.25);border-color:rgba(248,113,113,.4)}\n"
+            "  .badge{display:inline-block;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.4);color:#10b981;font-size:.7rem;padding:3px 10px;border-radius:20px;margin-top:20px;font-weight:600;letter-spacing:.05em}\n"
+            "</style></head><body>\n"
+            "<div class='card'>\n"
+            f"  <h1>{display_name}</h1>\n"
+            "  <p>Built by Gas Town multi-agent system</p>\n"
+            "  <div class='display' id='display'>0</div>\n"
+            "  <div class='grid'>\n"
+            "    <button class='btn-clear' onclick='clr()'>AC</button>\n"
+            "    <button class='btn-op' onclick='app('±')'>±</button>\n"
+            "    <button class='btn-op' onclick='app('%')'>%</button>\n"
+            "    <button class='btn-op' onclick='app('/')'>÷</button>\n"
+            "    <button onclick='app(7)'>7</button><button onclick='app(8)'>8</button>\n"
+            "    <button onclick='app(9)'>9</button>\n"
+            "    <button class='btn-op' onclick='app('*')'>×</button>\n"
+            "    <button onclick='app(4)'>4</button><button onclick='app(5)'>5</button>\n"
+            "    <button onclick='app(6)'>6</button>\n"
+            "    <button class='btn-op' onclick='app('-')'>−</button>\n"
+            "    <button onclick='app(1)'>1</button><button onclick='app(2)'>2</button>\n"
+            "    <button onclick='app(3)'>3</button>\n"
+            "    <button class='btn-op' onclick='app('+')'>+</button>\n"
+            "    <button onclick='app(0)' style='grid-column:span 2'>0</button>\n"
+            "    <button onclick='app('.')'>.</button>\n"
+            "    <button class='btn-eq' onclick='calc()'>=</button>\n"
+            "  </div>\n"
+            "  <div><span class='badge'>⛽ GAS TOWN</span></div>\n"
+            "</div>\n"
+            "<script>\n"
+            "let expr='';\n"
+            "const d=document.getElementById('display');\n"
+            "function app(v){if(v==='±'){try{d.textContent=String(-eval(expr||'0'));expr=d.textContent;}catch(e){}return;}if(v==='%'){try{d.textContent=String(eval(expr||'0')/100);expr=d.textContent;}catch(e){}return;}expr+=String(v);d.textContent=expr;}\n"
+            "function calc(){try{const r=String(eval(expr));d.textContent=r;expr=r;}catch(e){d.textContent='Error';expr='';}}\n"
+            "function clr(){expr='';d.textContent='0';}\n"
+            "document.addEventListener('keydown',e=>{if(e.key>='0'&&e.key<='9'||['+','-','*','/','.',].includes(e.key))app(e.key);else if(e.key==='Enter')calc();else if(e.key==='Backspace'){expr=expr.slice(0,-1);d.textContent=expr||'0';}else if(e.key==='Escape')clr();});\n"
+            "</script>\n"
+            "</body></html>\n"
+            "\"\"\"\n\n"
+            "@app.get('/', response_class=HTMLResponse)\n"
+            "def root():\n"
+            "    return HTML\n\n"
+            "@app.get('/api/health')\n"
+            "def health():\n"
+            f"    return {{'status': 'ok', 'project': '{project_name}'}}\n"
         ),
         "requirements.txt": "fastapi>=0.111\nuvicorn[standard]>=0.29\n",
         "vercel.json": json.dumps({
