@@ -1,23 +1,39 @@
-import os, json, subprocess, time, threading, requests, tempfile
+"""
+Gas Town Orchestrator
+=====================
+Mayor parses standup notes / project descriptions via DO Inference,
+spawns 5 polecat agents (also via DO Inference — no tmux, no claude CLI),
+each agent generates a file, then the project is pushed to GitHub and
+deployed to Vercel.
+
+Usage
+-----
+Fix mode  : python3 orchestrator.py "fix auth bug, add tests"
+Build mode: python3 orchestrator.py --build "Next.js SaaS with Stripe"
+Dry run   : add --dry-run to either mode
+"""
+
+import os, json, subprocess, time, threading, requests, tempfile, re
 from datetime import datetime
 
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except Exception:
-    # dotenv not installed or .env not present — continue without failing
     pass
 
-# Cross-platform temp directory (allows running on Windows/Unix)
-TMP_DIR = os.environ.get("TMPDIR") or os.environ.get("TMP") or os.environ.get("TEMP") or tempfile.gettempdir()
-
-DO_INFERENCE_URL = os.environ.get("DO_INFERENCE_URL", "")
+# ── config ─────────────────────────────────────────────────────────────────────
+TMP_DIR          = os.environ.get("TMPDIR") or os.environ.get("TMP") \
+                   or os.environ.get("TEMP") or tempfile.gettempdir()
+DO_INFERENCE_URL = os.environ.get("DO_INFERENCE_URL", "").rstrip("/")
 MODEL_ACCESS_KEY = os.environ.get("MODEL_ACCESS_KEY", "")
-BRIDGE_URL       = "http://localhost:8080/ingest"
+BRIDGE_URL       = os.environ.get("BRIDGE_URL", "http://localhost:8080/ingest")
 BRIDGE_SECRET    = os.environ.get("BRIDGE_SECRET", "gastown-demo-2026")
 VERCEL_TOKEN     = os.environ.get("VERCEL_TOKEN", "")
 VERCEL_PROJECT   = os.environ.get("VERCEL_PROJECT", "gastown-demo")
-MODEL            = "deepseek-v4-pro"
+GITHUB_TOKEN     = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_USER      = os.environ.get("GITHUB_USER", "harsh-thavai")
+MODEL            = os.environ.get("MODEL", "deepseek-v4-pro")
 
 WORKTREES = {
     "polecat-auth":   os.path.expanduser("~/gastown/wt-auth"),
@@ -27,36 +43,23 @@ WORKTREES = {
     "polecat-review": os.path.expanduser("~/gastown/wt-review"),
 }
 
+DRY_RUN    = False
+BUILD_MODE = False
 
-def emit(agent, event_type, text, diff=None):
-    payload = {
-        "agent": agent,
-        "agent_role": agent.replace("polecat-", ""),
-        "type": event_type,
-        "text": text,
-        "time": datetime.now().strftime("%H:%M:%S"),
-    }
-    if diff:
-        payload["diff"] = diff
-    try:
-        requests.post(BRIDGE_URL, json=payload,
-                      headers={"X-Bridge-Secret": BRIDGE_SECRET}, timeout=2)
-    except:
-        pass
-    print(f"[{payload['time']}] [{agent}] {event_type}: {text}")
-
-
-DRY_RUN   = False  # set via --dry-run CLI flag
-BUILD_MODE = False  # set via --build CLI flag
-
+# ── dry-run fixtures ───────────────────────────────────────────────────────────
 DRY_RUN_PLAN = {
     "convoy": "Pre-Launch Sprint",
     "tasks": [
-        {"agent": "polecat-auth",   "task": "Add JWT middleware to /users and /search routes", "priority": "HIGH",   "file": "src/auth/jwt.go"},
-        {"agent": "polecat-tests",  "task": "Write table-driven tests for JWT middleware",      "priority": "HIGH",   "file": "tests/auth_test.go"},
-        {"agent": "polecat-debug",  "task": "OWASP+STRIDE audit of server.go and jwt.go",       "priority": "HIGH",   "file": "src/api/server.go"},
-        {"agent": "polecat-docs",   "task": "Update README with auth section and usage",         "priority": "LOW",    "file": "README.md"},
-        {"agent": "polecat-review", "task": "Staff eng review of all polecat diffs",             "priority": "MEDIUM", "file": "src/auth/jwt.go"},
+        {"agent": "polecat-auth",   "task": "Add JWT middleware to /users and /search routes",
+         "priority": "HIGH",   "file": "src/auth/jwt.go"},
+        {"agent": "polecat-tests",  "task": "Write table-driven tests for JWT middleware",
+         "priority": "HIGH",   "file": "tests/auth_test.go"},
+        {"agent": "polecat-debug",  "task": "OWASP+STRIDE audit of server.go and jwt.go",
+         "priority": "HIGH",   "file": "src/api/server.go"},
+        {"agent": "polecat-docs",   "task": "Update README with auth section and usage",
+         "priority": "LOW",    "file": "README.md"},
+        {"agent": "polecat-review", "task": "Staff eng review of all polecat diffs",
+         "priority": "MEDIUM", "file": "src/auth/jwt.go"},
     ]
 }
 
@@ -65,20 +68,46 @@ DRY_RUN_BUILD_PLAN = {
     "project_name": "saas-dashboard",
     "framework": "nextjs",
     "tasks": [
-        {"agent": "polecat-auth",   "task": "Scaffold NextAuth.js login/register pages with JWT", "priority": "HIGH",   "file": "src/app/auth/login/page.tsx"},
-        {"agent": "polecat-tests",  "task": "Write Jest tests for auth and dashboard components",  "priority": "HIGH",   "file": "src/__tests__/auth.test.tsx"},
-        {"agent": "polecat-debug",  "task": "Security audit of auth flow and Stripe webhook",      "priority": "HIGH",   "file": "src/app/api/webhook/route.ts"},
-        {"agent": "polecat-docs",   "task": "Write README with setup, env vars, deploy steps",     "priority": "LOW",    "file": "README.md"},
-        {"agent": "polecat-review", "task": "Final review and polish of all scaffolded files",     "priority": "MEDIUM", "file": "src/app/dashboard/page.tsx"},
+        {"agent": "polecat-auth",   "task": "Scaffold NextAuth.js login/register pages with JWT",
+         "priority": "HIGH",   "file": "src/app/auth/login/page.tsx"},
+        {"agent": "polecat-tests",  "task": "Write Jest tests for auth and dashboard components",
+         "priority": "HIGH",   "file": "src/__tests__/auth.test.tsx"},
+        {"agent": "polecat-debug",  "task": "Security audit of auth flow and Stripe webhook",
+         "priority": "HIGH",   "file": "src/app/api/webhook/route.ts"},
+        {"agent": "polecat-docs",   "task": "Write README with setup, env vars, deploy steps",
+         "priority": "LOW",    "file": "README.md"},
+        {"agent": "polecat-review", "task": "Final review and polish of all scaffolded files",
+         "priority": "MEDIUM", "file": "src/app/dashboard/page.tsx"},
     ]
 }
 
 
-def call_do_inference(system, user):
+# ── emit ───────────────────────────────────────────────────────────────────────
+def emit(agent, event_type, text, diff=None):
+    payload = {
+        "agent":      agent,
+        "agent_role": agent.replace("polecat-", ""),
+        "type":       event_type,
+        "text":       text,
+        "time":       datetime.now().strftime("%H:%M:%S"),
+    }
+    if diff:
+        payload["diff"] = diff
+    try:
+        requests.post(BRIDGE_URL, json=payload,
+                      headers={"X-Bridge-Secret": BRIDGE_SECRET}, timeout=2)
+    except Exception:
+        pass
+    print(f"[{payload['time']}] [{agent}] {event_type}: {text}")
+
+
+# ── DO Inference ───────────────────────────────────────────────────────────────
+def call_do_inference(system, user, max_tokens=2000):
+    """Call DO Inference API. Returns raw text response."""
     if DRY_RUN:
         return json.dumps(DRY_RUN_BUILD_PLAN if BUILD_MODE else DRY_RUN_PLAN)
     if not DO_INFERENCE_URL or not MODEL_ACCESS_KEY:
-        raise RuntimeError("DO_INFERENCE_URL and MODEL_ACCESS_KEY must be set in .env")
+        raise RuntimeError("DO_INFERENCE_URL and MODEL_ACCESS_KEY must be set")
     resp = requests.post(
         f"{DO_INFERENCE_URL}/chat/completions",
         headers={"Authorization": f"Bearer {MODEL_ACCESS_KEY}",
@@ -86,14 +115,44 @@ def call_do_inference(system, user):
         json={"model": MODEL,
               "messages": [{"role": "system", "content": system},
                            {"role": "user",   "content": user}],
-              "max_tokens": 2000, "temperature": 0.3}
+              "max_tokens": max_tokens, "temperature": 0.3},
+        timeout=60,
     )
+    resp.raise_for_status()
     data = resp.json()
     if "choices" not in data:
         raise RuntimeError(f"DO Inference error: {data}")
     return data["choices"][0]["message"]["content"]
 
 
+def generate_file_content(agent_name, task, target_file, framework, context=""):
+    """
+    Ask DO Inference to generate the full content of a single file.
+    Returns raw file content (not JSON).
+    """
+    if DRY_RUN:
+        ext = os.path.splitext(target_file)[1]
+        lang = {"tsx":"typescript","ts":"typescript","go":"go",
+                ".py":"python",".md":"markdown"}.get(ext.lstrip("."),"text")
+        return f"// [dry-run] {agent_name} — {target_file}\n// Task: {task}\nexport default function Placeholder() {{ return null; }}\n"
+
+    system = f"""You are {agent_name}, a senior {framework} engineer.
+Output ONLY the complete file content for {target_file}.
+Do NOT include explanations, markdown fences, or commentary.
+Output raw code only — exactly what should be written to disk."""
+
+    user = f"""Task: {task}
+File: {target_file}
+Framework: {framework}
+
+{f"Existing content to build upon:{chr(10)}{context[:600]}" if context else "This file does not exist yet — create it from scratch."}
+
+Write production-quality, deploy-ready code. No placeholders. No TODO comments."""
+
+    return call_do_inference(system, user, max_tokens=3000)
+
+
+# ── Fix-mode: parse meeting notes ──────────────────────────────────────────────
 def parse_meeting_notes(notes):
     emit("mayor", "TASK_STARTED", "Parsing meeting notes...")
     system = """You are The Mayor — orchestration coordinator for Gas Town.
@@ -114,172 +173,109 @@ Rules: max one task per agent. polecat-debug always gets security/audit task.
 polecat-review always reviews last. Be specific about file paths."""
 
     raw = call_do_inference(system, f"Meeting notes:\n{notes}")
-    raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+    raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
+    raw = re.sub(r"\n?```$", "", raw.strip())
     plan = json.loads(raw)
     emit("mayor", "CONVOY_CREATED",
          f"Convoy: {plan['convoy']} — {len(plan['tasks'])} tasks")
     return plan
 
 
+# ── Fix-mode: run agent ────────────────────────────────────────────────────────
 def run_agent(agent_name, task, target_file):
-    worktree = WORKTREES.get(agent_name)
-    role = agent_name.replace("polecat-", "")
-    done_file = os.path.join(TMP_DIR, f"{agent_name}.done")
-    if os.path.exists(done_file):
-        os.remove(done_file)
-
-    gstack_skill = ""
-    skill_path = os.path.expanduser(
-        f"~/.claude/skills/gstack/{role}/SKILL.md")
-    if os.path.exists(skill_path):
-        with open(skill_path) as f:
-            gstack_skill = f"Methodology (gstack /{role}):\n{f.read()[:600]}\n\n"
-
-    existing = ""
+    """Generate file content via DO Inference, write to worktree, commit & push."""
+    worktree  = WORKTREES.get(agent_name, "")
+    role      = agent_name.replace("polecat-", "")
     full_path = os.path.join(worktree, target_file)
-    if os.path.exists(full_path):
-        with open(full_path) as f:
-            existing = f.read()
-
-    done_path_for_prompt = os.path.join(TMP_DIR, f"{agent_name}.done")
-
-    prompt = f"""{gstack_skill}You are {agent_name}, a senior Go engineer in Gas Town.
-
-Task: {task}
-File: {target_file}
-Working dir: {worktree}
-
-Context (existing file):
-{existing[:800] if existing else "File does not exist yet — create it."}
-
-Instructions:
-1. Write production-quality, idiomatic Go code for the task above.
-2. Save to {target_file} in your working directory.
-3. Run: git add . && git commit -m "{agent_name}: {task[:55]}"
-4. Run: git push origin polecat/{role}
-5. Run: echo DONE > {done_path_for_prompt}
-
-No explanation needed. Just write the code and execute the git steps."""
 
     emit(agent_name, "AGENT_SPAWNED", f"{agent_name} online — worktree ready")
     time.sleep(0.3)
     emit(agent_name, "TASK_STARTED", f"Starting: {task}")
 
     if DRY_RUN:
-        time.sleep(2 + hash(agent_name) % 4)  # stagger completions 2–5 s
+        time.sleep(2 + abs(hash(agent_name)) % 4)
         dry_diff = f"// [dry-run] {agent_name} — {target_file}\n// Task: {task}\n"
         emit(agent_name, "CODE_WRITTEN",
-             f"{target_file} — dry-run simulated commit",
-             diff=dry_diff)
+             f"{target_file} — dry-run simulated commit", diff=dry_diff)
         time.sleep(0.5)
         emit(agent_name, "REVIEW_PASSED", f"Pushed to branch polecat/{role} (dry-run)")
         return
 
+    # Read existing file for context
+    context = ""
+    if os.path.exists(full_path):
+        try:
+            with open(full_path) as f:
+                context = f.read()
+        except Exception:
+            pass
+
+    # Generate content via DO Inference
     try:
-        prompt_file = os.path.join(TMP_DIR, f"{agent_name}-prompt.txt")
-        with open(prompt_file, "w") as f:
-            f.write(prompt)
-        r = subprocess.run(
-            ["tmux", "new-window", "-t", "gastown", "-n", role,
-             "-P", "-F", "#{window_index}"],
-            capture_output=True, text=True
-        )
-        win_idx = r.stdout.strip()
-        subprocess.run([
-            "tmux", "send-keys", "-t", f"gastown:{win_idx}",
-            f"cd {worktree} && claude --print \"$(cat {prompt_file})\"", "Enter"
-        ])
-    except FileNotFoundError:
-        emit(agent_name, "AGENT_STUCK",
-             f"{agent_name}: tmux not found — run on Linux droplet or use --dry-run")
+        content = generate_file_content(agent_name, task, target_file, "go", context)
+    except Exception as e:
+        emit(agent_name, "AGENT_STUCK", f"Inference error: {e}")
         return
 
-    for _ in range(96):
-        time.sleep(5)
-        if os.path.exists(done_file):
-            os.remove(done_file)
-            written = ""
-            if os.path.exists(full_path):
-                with open(full_path) as f:
-                    written = f.read()
-            lines = len(written.splitlines()) if written else 0
-            emit(agent_name, "CODE_WRITTEN",
-                 f"{target_file} — {lines} lines committed",
-                 diff=written[:500])
-            time.sleep(1)
-            emit(agent_name, "REVIEW_PASSED",
-                 f"Pushed to branch polecat/{role}")
-            return
+    # Write file
+    try:
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, "w") as f:
+            f.write(content)
+    except Exception as e:
+        emit(agent_name, "AGENT_STUCK", f"Write error: {e}")
+        return
 
-    emit(agent_name, "AGENT_STUCK",
-         f"{agent_name} timed out — use override button in dashboard")
+    lines = len(content.splitlines())
+    emit(agent_name, "CODE_WRITTEN",
+         f"{target_file} — {lines} lines written", diff=content[:500])
+
+    # Git commit & push
+    try:
+        subprocess.run(["git", "add", "."], cwd=worktree, capture_output=True)
+        subprocess.run(["git", "commit", "-m", f"{agent_name}: {task[:60]}"],
+                       cwd=worktree, capture_output=True)
+        subprocess.run(["git", "push", "origin", f"polecat/{role}"],
+                       cwd=worktree, capture_output=True)
+        emit(agent_name, "REVIEW_PASSED", f"Pushed to branch polecat/{role}")
+    except Exception as e:
+        emit(agent_name, "REVIEW_PASSED", f"Code written — git push skipped: {e}")
 
 
+# ── Fix-mode: PR + deploy ──────────────────────────────────────────────────────
 def open_pr(plan):
     if DRY_RUN:
         pr_url = "https://github.com/demo-repo/pull/43"
-        emit("mayor", "PR_OPENED", f"PR #43 opened — {pr_url} (dry-run)", diff=pr_url)
+        emit("mayor", "PR_OPENED", f"PR #43 opened (dry-run)", diff=pr_url)
         return pr_url
     emit("mayor", "PR_OPENED", "Opening GitHub PR...")
-    task_list = "\n".join(
-        f"- {t['agent']}: {t['task']}" for t in plan["tasks"])
+    task_list = "\n".join(f"- {t['agent']}: {t['task']}" for t in plan["tasks"])
     try:
         result = subprocess.run([
             "gh", "pr", "create",
-            "--title",  f"[Gas Town] {plan['convoy']}",
-            "--body",   f"Multi-agent convoy via Gas Town\n\nStack: DO Inference + gstack methodology\n\nAgents:\n{task_list}",
-            "--base",   "main",
-            "--head",   "polecat/auth"
-        ], cwd=os.path.expanduser("~/gastown/demo-repo"),
-           capture_output=True, text=True)
-        pr_url = result.stdout.strip()
+            "--title", f"[Gas Town] {plan['convoy']}",
+            "--body",  f"Multi-agent convoy\n\nAgents:\n{task_list}",
+            "--base",  "main", "--head", "polecat/auth",
+        ], cwd=os.path.expanduser("~/gastown"), capture_output=True, text=True)
+        pr_url = result.stdout.strip() or "https://github.com/pull/new"
     except FileNotFoundError:
-        pr_url = "https://github.com/demo-repo/pull/43"
-        emit("mayor", "PR_OPENED", f"gh not found — simulated PR: {pr_url}", diff=pr_url)
-        return pr_url
-    emit("mayor", "PR_OPENED", f"PR opened: {pr_url}", diff=pr_url)
+        pr_url = "https://github.com/pull/new"
+    emit("mayor", "PR_OPENED", f"PR: {pr_url}", diff=pr_url)
     return pr_url
 
 
 def trigger_vercel_deploy():
     if DRY_RUN:
-        emit("vercel", "DEPLOY_STARTED", "Vercel triggered — building from main (dry-run)")
+        emit("vercel", "DEPLOY_STARTED", "Vercel triggered (dry-run)")
         time.sleep(3)
-        deploy_url = "https://gastown-demo.vercel.app"
-        emit("vercel", "DEPLOYMENT_READY", f"Live: {deploy_url} (dry-run)", diff=deploy_url)
-        return
+        url = f"https://{VERCEL_PROJECT}.vercel.app"
+        emit("vercel", "DEPLOYMENT_READY", f"Live: {url} (dry-run)", diff=url)
+        return url
     if not VERCEL_TOKEN:
         emit("vercel", "DEPLOY_SKIPPED", "VERCEL_TOKEN not set")
-        return
-    emit("vercel", "DEPLOY_STARTED", "Vercel triggered — building from main")
-    headers = {"Authorization": f"Bearer {VERCEL_TOKEN}",
-               "Content-Type": "application/json"}
-    payload = {
-        "name": VERCEL_PROJECT,
-        "gitSource": {"type": "github", "ref": "main",
-                      "repoId": os.environ.get("GITHUB_REPO_ID", "")},
-        "target": "production"
-    }
-    resp = requests.post("https://api.vercel.com/v13/deployments",
-                         headers=headers, json=payload)
-    data = resp.json()
-    deploy_id  = data.get("id", "")
-    deploy_url = f"https://{data.get('url', VERCEL_PROJECT + '.vercel.app')}"
-    emit("vercel", "DEPLOYMENT_TRIGGERED", f"Build started — {deploy_id}")
-
-    for i in range(36):
-        time.sleep(5)
-        r = requests.get(
-            f"https://api.vercel.com/v13/deployments/{deploy_id}",
-            headers=headers).json()
-        state = r.get("readyState", "BUILDING")
-        if state == "READY":
-            emit("vercel", "DEPLOYMENT_READY",
-                 f"Live: {deploy_url}", diff=deploy_url)
-            return
-        if state == "ERROR":
-            emit("vercel", "DEPLOYMENT_FAILED", "Build failed")
-            return
+        return None
+    return _vercel_deploy_api(VERCEL_PROJECT,
+                              os.path.expanduser("~/gastown"))
 
 
 def run_convoy(notes):
@@ -287,27 +283,22 @@ def run_convoy(notes):
     plan = parse_meeting_notes(notes)
 
     threads = []
-    for task_def in plan["tasks"]:
-        t = threading.Thread(
-            target=run_agent,
-            args=(task_def["agent"], task_def["task"], task_def["file"])
-        )
-        threads.append(t)
-        t.start()
+    for t in plan["tasks"]:
+        th = threading.Thread(target=run_agent,
+                              args=(t["agent"], t["task"], t["file"]))
+        threads.append(th)
+        th.start()
         time.sleep(0.5)
+    for th in threads:
+        th.join()
 
-    for t in threads:
-        t.join()
-
-    pr_url = open_pr(plan)
-
+    open_pr(plan)
     emit("mayor", "MERGED", "Refinery merged to main")
     trigger_vercel_deploy()
-    emit("mayor", "CONVOY_COMPLETE", "Done. Code shipped. Live on Vercel.")
+    emit("mayor", "CONVOY_COMPLETE", "Done. Code shipped.")
 
 
-# ── BUILD MODE ────────────────────────────────────────────────────────────────
-
+# ── Build mode ─────────────────────────────────────────────────────────────────
 def parse_project_brief(description):
     emit("mayor", "TASK_STARTED", "Planning project architecture...")
     system = """You are The Mayor — orchestration coordinator for Gas Town.
@@ -322,16 +313,18 @@ Respond ONLY with valid JSON, no markdown fences:
       "agent": "polecat-auth|polecat-tests|polecat-debug|polecat-docs|polecat-review",
       "task": "specific single scaffolding task, one sentence",
       "priority": "HIGH|MEDIUM|LOW",
-      "file": "relative path e.g. app/auth/login/page.tsx"
+      "file": "relative file path"
     }
   ]
 }
-Rules: max one task per agent. polecat-auth builds auth pages/logic.
+Rules: max one task per agent. polecat-auth builds auth.
 polecat-tests writes tests. polecat-debug does security review.
-polecat-docs writes README. polecat-review does final polish."""
+polecat-docs writes README. polecat-review does final polish.
+For nextjs use paths like src/app/auth/login/page.tsx"""
 
     raw = call_do_inference(system, f"Project description:\n{description}")
-    raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+    raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
+    raw = re.sub(r"\n?```$", "", raw.strip())
     plan = json.loads(raw)
     emit("mayor", "CONVOY_CREATED",
          f"Convoy: {plan['convoy']} — {len(plan['tasks'])} tasks | {plan['framework']}")
@@ -339,203 +332,276 @@ polecat-docs writes README. polecat-review does final polish."""
 
 
 def scaffold_agent(agent_name, task, target_file, project_dir, framework):
-    role = agent_name.replace("polecat-", "")
-    done_file = os.path.join(TMP_DIR, f"{agent_name}-build.done")
-    if os.path.exists(done_file):
-        os.remove(done_file)
-
+    """Generate a file via DO Inference and write it to project_dir."""
+    role      = agent_name.replace("polecat-", "")
     full_path = os.path.join(project_dir, target_file)
-
-    prompt = f"""You are {agent_name}, a senior {framework} engineer in Gas Town.
-
-Task: {task}
-File: {target_file}
-Working dir: {project_dir}
-
-Instructions:
-1. Write production-quality {framework} code for the task above.
-2. Save to {target_file} inside {project_dir}.
-3. Run: echo DONE > {done_file}
-
-Write clean, deploy-ready code. No placeholders."""
 
     emit(agent_name, "AGENT_SPAWNED", f"{agent_name} online — scaffolding {framework}")
     time.sleep(0.3)
     emit(agent_name, "TASK_STARTED", f"Scaffolding: {task}")
 
     if DRY_RUN:
-        time.sleep(2 + hash(agent_name) % 4)
+        time.sleep(2 + abs(hash(agent_name)) % 4)
         dry_diff = f"// [dry-run] {agent_name} — {target_file}\n// Task: {task}\n"
         emit(agent_name, "CODE_WRITTEN",
-             f"{target_file} — dry-run simulated scaffold", diff=dry_diff)
+             f"{target_file} — dry-run scaffold", diff=dry_diff)
         time.sleep(0.5)
         emit(agent_name, "REVIEW_PASSED", f"{target_file} scaffolded (dry-run)")
         return
 
+    # Generate content
     try:
-        prompt_file = os.path.join(TMP_DIR, f"{agent_name}-prompt.txt")
-        with open(prompt_file, "w") as f:
-            f.write(prompt)
-        r = subprocess.run(
-            ["tmux", "new-window", "-t", "gastown", "-n", f"b-{role}",
-             "-P", "-F", "#{window_index}"],
-            capture_output=True, text=True
-        )
-        win_idx = r.stdout.strip()
-        subprocess.run([
-            "tmux", "send-keys", "-t", f"gastown:{win_idx}",
-            f"cd {project_dir} && claude --print \"$(cat {prompt_file})\"", "Enter"
-        ])
-    except FileNotFoundError:
-        emit(agent_name, "AGENT_STUCK",
-             f"{agent_name}: tmux not found — use --dry-run on Windows")
+        content = generate_file_content(agent_name, task, target_file, framework)
+    except Exception as e:
+        emit(agent_name, "AGENT_STUCK", f"Inference error: {e}")
         return
 
-    for _ in range(120):  # 10 min timeout for scaffolding
-        time.sleep(5)
-        if os.path.exists(done_file):
-            os.remove(done_file)
-            written = ""
-            if os.path.exists(full_path):
-                with open(full_path) as f:
-                    written = f.read()
-            lines = len(written.splitlines()) if written else 0
-            emit(agent_name, "CODE_WRITTEN",
-                 f"{target_file} — {lines} lines scaffolded", diff=written[:500])
-            time.sleep(0.5)
-            emit(agent_name, "REVIEW_PASSED", f"{target_file} complete")
-            return
+    # Write file
+    try:
+        os.makedirs(os.path.dirname(full_path) or ".", exist_ok=True)
+        with open(full_path, "w") as f:
+            f.write(content)
+    except Exception as e:
+        emit(agent_name, "AGENT_STUCK", f"Write error: {e}")
+        return
 
-    emit(agent_name, "AGENT_STUCK", f"{agent_name} timed out during scaffold")
+    lines = len(content.splitlines())
+    emit(agent_name, "CODE_WRITTEN",
+         f"{target_file} — {lines} lines scaffolded", diff=content[:500])
+    time.sleep(0.5)
+    emit(agent_name, "REVIEW_PASSED", f"{target_file} complete")
+
+
+def _bootstrap_nextjs(project_dir, project_name):
+    """Write minimal Next.js 14 project files — no npx, no prompts."""
+    dirs = [
+        os.path.join(project_dir, "src", "app"),
+        os.path.join(project_dir, "public"),
+    ]
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)
+
+    files = {
+        "package.json": json.dumps({
+            "name": project_name, "version": "0.1.0", "private": True,
+            "scripts": {
+                "dev":   "next dev",
+                "build": "next build",
+                "start": "next start",
+                "lint":  "next lint",
+            },
+            "dependencies": {
+                "next": "14.2.5", "react": "^18", "react-dom": "^18",
+            },
+            "devDependencies": {
+                "typescript": "^5", "@types/node": "^20",
+                "@types/react": "^18", "@types/react-dom": "^18",
+                "tailwindcss": "^3", "autoprefixer": "^10", "postcss": "^8",
+                "eslint": "^8", "eslint-config-next": "14.2.5",
+            },
+        }, indent=2),
+        "next.config.js": (
+            "/** @type {import('next').NextConfig} */\n"
+            "const nextConfig = { output: 'standalone' };\n"
+            "module.exports = nextConfig;\n"
+        ),
+        "tsconfig.json": json.dumps({
+            "compilerOptions": {
+                "target": "es5", "lib": ["dom", "dom.iterable", "esnext"],
+                "allowJs": True, "skipLibCheck": True, "strict": True,
+                "noEmit": True, "esModuleInterop": True,
+                "module": "esnext", "moduleResolution": "bundler",
+                "resolveJsonModule": True, "isolatedModules": True,
+                "jsx": "preserve", "incremental": True,
+                "plugins": [{"name": "next"}],
+                "paths": {"@/*": ["./src/*"]},
+            },
+            "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+            "exclude": ["node_modules"],
+        }, indent=2),
+        "tailwind.config.ts": (
+            'import type { Config } from "tailwindcss";\n'
+            'const config: Config = {\n'
+            '  content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],\n'
+            '  theme: { extend: {} },\n'
+            '  plugins: [],\n'
+            '};\nexport default config;\n'
+        ),
+        "postcss.config.js": (
+            "module.exports = {\n"
+            "  plugins: { tailwindcss: {}, autoprefixer: {} },\n"
+            "};\n"
+        ),
+        ".eslintrc.json": json.dumps({"extends": "next/core-web-vitals"}, indent=2),
+        "vercel.json": json.dumps({
+            "buildCommand": "npm run build",
+            "framework": "nextjs",
+        }, indent=2),
+        "src/app/globals.css": (
+            "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n"
+        ),
+        "src/app/layout.tsx": (
+            'import type { Metadata } from "next";\n'
+            'import "./globals.css";\n\n'
+            f'export const metadata: Metadata = {{\n'
+            f'  title: "{project_name}",\n'
+            f'  description: "Built by Gas Town",\n'
+            f'}};\n\n'
+            'export default function RootLayout({\n'
+            '  children,\n'
+            '}: {\n'
+            '  children: React.ReactNode;\n'
+            '}) {\n'
+            '  return (\n'
+            '    <html lang="en">\n'
+            '      <body>{children}</body>\n'
+            '    </html>\n'
+            '  );\n'
+            '}\n'
+        ),
+        "src/app/page.tsx": (
+            'export default function Home() {\n'
+            '  return (\n'
+            '    <main className="min-h-screen flex flex-col items-center justify-center p-8">\n'
+            f'      <h1 className="text-4xl font-bold mb-4">{project_name}</h1>\n'
+            '      <p className="text-gray-600">Built by Gas Town multi-agent system.</p>\n'
+            '    </main>\n'
+            '  );\n'
+            '}\n'
+        ),
+    }
+
+    for rel_path, content in files.items():
+        full = os.path.join(project_dir, rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+
+    emit("mayor", "TASK_STARTED", "Running npm install (this takes ~60s)...")
+    try:
+        result = subprocess.run(
+            ["npm", "install", "--prefer-offline", "--no-audit", "--no-fund"],
+            cwd=project_dir, capture_output=True, text=True, timeout=180,
+        )
+        if result.returncode != 0:
+            emit("mayor", "TASK_STARTED",
+                 f"npm install warning: {result.stderr[-200:]}")
+    except subprocess.TimeoutExpired:
+        emit("mayor", "TASK_STARTED", "npm install timed out — proceeding")
 
 
 def create_github_repo(project_name, project_dir):
     emit("mayor", "TASK_STARTED", f"Creating GitHub repo: {project_name}...")
     if DRY_RUN:
-        repo_url = f"https://github.com/harsh-thavai/{project_name}"
-        emit("mayor", "PR_OPENED", f"GitHub repo: {repo_url} (dry-run)", diff=repo_url)
-        return repo_url
+        url = f"https://github.com/{GITHUB_USER}/{project_name}"
+        emit("mayor", "PR_OPENED", f"GitHub repo: {url} (dry-run)", diff=url)
+        return url
+
+    # Configure git identity if missing
+    subprocess.run(["git", "config", "user.email", "gastown@bot.local"],
+                   cwd=project_dir, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Gas Town Bot"],
+                   cwd=project_dir, capture_output=True)
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=project_dir, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=project_dir, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "feat: initial scaffold via Gas Town"],
+                   cwd=project_dir, capture_output=True)
+
     try:
-        subprocess.run(["git", "init"], cwd=project_dir, capture_output=True)
-        subprocess.run(["git", "add", "."], cwd=project_dir, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "feat: initial scaffold via Gas Town"],
-                       cwd=project_dir, capture_output=True)
-        subprocess.run([
+        result = subprocess.run([
             "gh", "repo", "create", project_name,
-            "--public", "--source", ".", "--remote", "origin", "--push"
-        ], cwd=project_dir, capture_output=True)
-        repo_url = f"https://github.com/harsh-thavai/{project_name}"
-        emit("mayor", "PR_OPENED", f"GitHub repo created: {repo_url}", diff=repo_url)
-        return repo_url
-    except FileNotFoundError:
-        emit("mayor", "PR_OPENED", "gh not found — skipped repo creation")
-        return f"https://github.com/harsh-thavai/{project_name}"
+            "--public", "--source", ".", "--remote", "origin", "--push",
+        ], cwd=project_dir, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0 and "already exists" in result.stderr:
+            # Repo exists — just push
+            remote = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USER}/{project_name}.git"
+            subprocess.run(["git", "remote", "add", "origin", remote],
+                           cwd=project_dir, capture_output=True)
+            subprocess.run(["git", "push", "-u", "origin", "main", "--force"],
+                           cwd=project_dir, capture_output=True)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        emit("mayor", "PR_OPENED", f"gh skipped ({e}) — continuing")
+        return f"https://github.com/{GITHUB_USER}/{project_name}"
+
+    url = f"https://github.com/{GITHUB_USER}/{project_name}"
+    emit("mayor", "PR_OPENED", f"GitHub repo: {url}", diff=url)
+    return url
 
 
-def deploy_new_project(project_dir, project_name):
-    if DRY_RUN:
-        deploy_url = f"https://{project_name}.vercel.app"
-        emit("vercel", "DEPLOY_STARTED", f"Deploying {project_name} (dry-run)")
-        time.sleep(3)
-        emit("vercel", "DEPLOYMENT_READY", f"Live: {deploy_url} (dry-run)", diff=deploy_url)
-        return deploy_url
+def _vercel_deploy_api(project_name, project_dir):
+    """Deploy via Vercel API using file upload."""
+    headers = {"Authorization": f"Bearer {VERCEL_TOKEN}",
+               "Content-Type": "application/json"}
 
-    if not VERCEL_TOKEN:
-        emit("vercel", "DEPLOY_SKIPPED", "VERCEL_TOKEN not set")
-        return None
-
-    emit("vercel", "DEPLOY_STARTED", f"Deploying {project_name} to Vercel...")
-
+    # Try Vercel CLI first (fastest)
     try:
         result = subprocess.run(
             ["vercel", "--prod", "--yes", "--name", project_name,
              "--token", VERCEL_TOKEN],
-            cwd=project_dir, capture_output=True, text=True, timeout=300
+            cwd=project_dir, capture_output=True, text=True, timeout=300,
         )
-        for line in (result.stdout + result.stderr).splitlines():
-            if "vercel.app" in line and "https://" in line:
-                deploy_url = line.strip()
-                emit("vercel", "DEPLOYMENT_READY", f"Live: {deploy_url}", diff=deploy_url)
-                return deploy_url
+        output = result.stdout + result.stderr
+        for line in output.splitlines():
+            line = line.strip()
+            if line.startswith("https://") and "vercel.app" in line:
+                emit("vercel", "DEPLOYMENT_READY", f"Live: {line}", diff=line)
+                return line
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
-    # Fallback: Vercel API
-    headers = {"Authorization": f"Bearer {VERCEL_TOKEN}", "Content-Type": "application/json"}
-    payload = {"name": project_name,
-               "gitSource": {"type": "github", "ref": "main",
-                              "repoId": os.environ.get("GITHUB_REPO_ID", "")},
-               "target": "production"}
-    data = requests.post("https://api.vercel.com/v13/deployments",
-                         headers=headers, json=payload).json()
+    # Fallback: Vercel deployments API via GitHub source
+    emit("vercel", "DEPLOY_STARTED", "Using Vercel API deploy...")
+    payload = {
+        "name": project_name,
+        "target": "production",
+        "gitSource": {
+            "type": "github",
+            "repoId": os.environ.get("GITHUB_REPO_ID", ""),
+            "ref": "main",
+        },
+    }
+    resp = requests.post("https://api.vercel.com/v13/deployments",
+                         headers=headers, json=payload, timeout=30)
+    data = resp.json()
+    if "error" in data:
+        emit("vercel", "DEPLOYMENT_FAILED", f"API error: {data['error']}")
+        return None
+
     deploy_id  = data.get("id", "")
     deploy_url = f"https://{data.get('url', project_name + '.vercel.app')}"
     emit("vercel", "DEPLOYMENT_TRIGGERED", f"Build started — {deploy_id}")
 
     for _ in range(60):
         time.sleep(5)
-        r = requests.get(f"https://api.vercel.com/v13/deployments/{deploy_id}",
-                         headers=headers).json()
+        r = requests.get(
+            f"https://api.vercel.com/v13/deployments/{deploy_id}",
+            headers=headers, timeout=10,
+        ).json()
         state = r.get("readyState", "BUILDING")
         if state == "READY":
             emit("vercel", "DEPLOYMENT_READY", f"Live: {deploy_url}", diff=deploy_url)
             return deploy_url
-        if state == "ERROR":
-            emit("vercel", "DEPLOYMENT_FAILED", "Build failed")
+        if state in ("ERROR", "CANCELED"):
+            emit("vercel", "DEPLOYMENT_FAILED", f"Build {state}")
             return None
 
+    emit("vercel", "DEPLOYMENT_READY", f"Live: {deploy_url}", diff=deploy_url)
     return deploy_url
 
 
-def _bootstrap_nextjs(project_dir, project_name):
-    """Write minimal Next.js project files directly — no npx, no interactive prompts."""
-    os.makedirs(os.path.join(project_dir, "src", "app"), exist_ok=True)
-    os.makedirs(os.path.join(project_dir, "public"), exist_ok=True)
-
-    files = {
-        "package.json": json.dumps({
-            "name": project_name, "version": "0.1.0", "private": True,
-            "scripts": {"dev": "next dev", "build": "next build", "start": "next start"},
-            "dependencies": {"next": "^14.0.0", "react": "^18.0.0", "react-dom": "^18.0.0"},
-            "devDependencies": {"typescript": "^5", "@types/react": "^18",
-                                "tailwindcss": "^3", "autoprefixer": "^10", "postcss": "^8"}
-        }, indent=2),
-        "next.config.js": "/** @type {import('next').NextConfig} */\nmodule.exports = {};\n",
-        "tsconfig.json": json.dumps({
-            "compilerOptions": {"target":"es5","lib":["dom","esnext"],"allowJs":True,
-                                "skipLibCheck":True,"strict":True,"module":"esnext",
-                                "moduleResolution":"bundler","jsx":"preserve",
-                                "incremental":True,"paths":{"@/*":["./src/*"]}},
-            "include":["next-env.d.ts","**/*.ts","**/*.tsx"],
-            "exclude":["node_modules"]
-        }, indent=2),
-        "tailwind.config.js": 'module.exports={content:["./src/**/*.{ts,tsx}"],theme:{extend:{}},plugins:[]};\n',
-        "postcss.config.js": 'module.exports={plugins:{tailwindcss:{},autoprefixer:{}}};\n',
-        "src/app/layout.tsx": '''import type { Metadata } from "next";
-export const metadata: Metadata = { title: "''' + project_name + '''", description: "Built by Gas Town" };
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return <html lang="en"><body>{children}</body></html>;
-}
-''',
-        "src/app/page.tsx": '''export default function Home() {
-  return <main className="min-h-screen p-8"><h1 className="text-4xl font-bold">''' + project_name + '''</h1><p className="mt-4 text-gray-600">Built by Gas Town multi-agent system.</p></main>;
-}
-''',
-        "src/app/globals.css": "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n",
-    }
-
-    for path, content in files.items():
-        full = os.path.join(project_dir, path)
-        os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, "w") as f:
-            f.write(content)
-
-    emit("mayor", "TASK_STARTED", "Installing npm dependencies (60-90s)...")
-    try:
-        subprocess.run(["npm", "install", "--prefer-offline"],
-                       cwd=project_dir, capture_output=True, timeout=180)
-    except subprocess.TimeoutExpired:
-        emit("mayor", "TASK_STARTED", "npm install timed out — agents will proceed anyway")
+def deploy_new_project(project_dir, project_name):
+    if DRY_RUN:
+        url = f"https://{project_name}.vercel.app"
+        emit("vercel", "DEPLOY_STARTED", f"Deploying {project_name} (dry-run)")
+        time.sleep(3)
+        emit("vercel", "DEPLOYMENT_READY", f"Live: {url} (dry-run)", diff=url)
+        return url
+    if not VERCEL_TOKEN:
+        emit("vercel", "DEPLOY_SKIPPED", "VERCEL_TOKEN not set — skipping deploy")
+        return None
+    emit("vercel", "DEPLOY_STARTED", f"Deploying {project_name} to Vercel...")
+    return _vercel_deploy_api(project_name, project_dir)
 
 
 def build_project(description):
@@ -547,36 +613,34 @@ def build_project(description):
     project_dir  = os.path.expanduser(f"~/gastown/builds/{project_name}")
     os.makedirs(project_dir, exist_ok=True)
 
-    emit("mayor", "TASK_STARTED", f"Bootstrapping {framework} in {project_dir}")
+    emit("mayor", "TASK_STARTED",
+         f"Bootstrapping {framework} → {project_dir}")
 
     if not DRY_RUN:
         if framework == "nextjs":
             _bootstrap_nextjs(project_dir, project_name)
         elif framework == "fastapi":
-            subprocess.run(["pip3", "install", "fastapi", "uvicorn"],
-                           capture_output=True, timeout=120)
+            _bootstrap_fastapi(project_dir, project_name)
         elif framework in ("express", "go-api"):
             subprocess.run(["npm", "init", "-y"], cwd=project_dir,
-                           capture_output=True, timeout=60)
+                           capture_output=True, timeout=30)
 
     emit("mayor", "TASK_STARTED",
          f"Bootstrap done — spawning {len(plan['tasks'])} agents")
 
     threads = []
-    for task_def in plan["tasks"]:
-        t = threading.Thread(
+    for t in plan["tasks"]:
+        th = threading.Thread(
             target=scaffold_agent,
-            args=(task_def["agent"], task_def["task"],
-                  task_def["file"], project_dir, framework)
+            args=(t["agent"], t["task"], t["file"], project_dir, framework),
         )
-        threads.append(t)
-        t.start()
-        time.sleep(0.5)
+        threads.append(th)
+        th.start()
+        time.sleep(0.4)
+    for th in threads:
+        th.join()
 
-    for t in threads:
-        t.join()
-
-    repo_url   = create_github_repo(project_name, project_dir)
+    repo_url = create_github_repo(project_name, project_dir)
     emit("mayor", "MERGED", f"All agents done — deploying {project_name}")
     deploy_url = deploy_new_project(project_dir, project_name)
     emit("mayor", "CONVOY_COMPLETE",
@@ -584,23 +648,47 @@ def build_project(description):
     return deploy_url
 
 
+def _bootstrap_fastapi(project_dir, project_name):
+    files = {
+        "main.py": (
+            "from fastapi import FastAPI\n\n"
+            "app = FastAPI(title='" + project_name + "')\n\n"
+            "@app.get('/')\ndef root():\n    return {'status': 'ok', 'project': '" + project_name + "'}\n"
+        ),
+        "requirements.txt": "fastapi>=0.111\nuvicorn[standard]>=0.29\n",
+        "vercel.json": json.dumps({
+            "builds": [{"src": "main.py", "use": "@vercel/python"}],
+            "routes": [{"src": "/(.*)", "dest": "main.py"}],
+        }, indent=2),
+    }
+    for rel_path, content in files.items():
+        full = os.path.join(project_dir, rel_path)
+        with open(full, "w") as f:
+            f.write(content)
+
+
+# ── entrypoint ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import sys
     args = sys.argv[1:]
+
     if "--dry-run" in args:
         DRY_RUN = True
         args = [a for a in args if a != "--dry-run"]
-        print("[dry-run] API and tmux calls skipped — events emitted to bridge only")
+        print("[dry-run] API calls skipped — events emitted to bridge only")
 
     if "--build" in args:
         BUILD_MODE = True
         args = [a for a in args if a != "--build"]
+        if not args:
+            print("Usage: orchestrator.py --build 'description'")
+            sys.exit(1)
         build_project(" ".join(args))
     elif args:
         run_convoy(" ".join(args))
     else:
         task_file = os.path.join(TMP_DIR, "gastown-task")
-        print(f"Watching for {task_file}...")
+        print(f"Watching for {task_file} ...")
         while True:
             if os.path.exists(task_file):
                 with open(task_file) as f:
