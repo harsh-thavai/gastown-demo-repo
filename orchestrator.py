@@ -1330,217 +1330,75 @@ def _bootstrap_vite_react(project_dir, project_name):
 
 
 def _bootstrap_fastapi(project_dir, project_name):
+    """Bootstrap a FastAPI project that serves HTML/CSS/JS pages written by agents."""
     display_name = project_name.replace("-", " ").title()
+
     main_py = f'''from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import math, operator
+import os, pathlib
+
+BASE = pathlib.Path(__file__).parent
 
 app = FastAPI(title="{display_name}")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-class CalcRequest(BaseModel):
-    expression: str
-
-class CalcResult(BaseModel):
-    result: float | str
-    expression: str
-
-@app.post("/api/calculate", response_model=CalcResult)
-def calculate(req: CalcRequest):
-    """Evaluate a math expression safely using Python."""
-    try:
-        safe_names = {{
-            "abs": abs, "round": round, "min": min, "max": max,
-            "pow": pow, "sqrt": math.sqrt, "pi": math.pi, "e": math.e,
-            "sin": math.sin, "cos": math.cos, "tan": math.tan,
-            "log": math.log, "log10": math.log10, "ceil": math.ceil, "floor": math.floor,
-        }}
-        result = eval(req.expression, {{"__builtins__": {{}}}}, safe_names)
-        if isinstance(result, (int, float)) and math.isfinite(result):
-            return CalcResult(result=round(float(result), 10), expression=req.expression)
-        return CalcResult(result="Error", expression=req.expression)
-    except Exception as e:
-        return CalcResult(result="Error", expression=req.expression)
-
-HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{display_name}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-:root{{--bg:#0a0a0f;--surface:#13131a;--surface2:#1c1c28;--border:#2a2a3d;--accent:#6366f1;--accent2:#8b5cf6;--green:#10b981;--red:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--mono:'SF Mono',monospace}}
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}}
-.wrapper{{width:100%;max-width:400px}}
-.header{{text-align:center;margin-bottom:32px}}
-.header h1{{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;color:var(--text)}}
-.header p{{font-size:.85rem;color:var(--text2);margin-top:6px}}
-.calc{{background:var(--surface);border:1px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,.6)}}
-.display-area{{padding:24px 24px 16px;border-bottom:1px solid var(--border);background:var(--bg)}}
-.expr{{font-family:var(--mono);font-size:.8rem;color:var(--text2);min-height:18px;text-align:right;word-break:break-all;margin-bottom:6px}}
-.result{{font-family:var(--mono);font-size:2.8rem;font-weight:300;text-align:right;word-break:break-all;line-height:1;min-height:44px;transition:color .15s}}
-.result.error{{color:var(--red);font-size:1.6rem}}
-.result.computing{{color:var(--text2)}}
-.history{{padding:8px 24px;background:var(--surface2);border-bottom:1px solid var(--border);min-height:36px}}
-.history-item{{font-family:var(--mono);font-size:.75rem;color:var(--text2);cursor:pointer;padding:2px 0}}
-.history-item:hover{{color:var(--accent)}}
-.buttons{{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}}
-.btn{{background:var(--surface);border:none;color:var(--text);font-family:'Inter',sans-serif;font-size:1rem;font-weight:500;padding:20px 16px;cursor:pointer;transition:background .1s;user-select:none}}
-.btn:hover{{background:var(--surface2)}}
-.btn:active{{background:var(--border)}}
-.btn-op{{color:var(--accent);background:#13131f}}
-.btn-op:hover{{background:#1a1a2e}}
-.btn-eq{{background:var(--accent);color:#fff;grid-column:span 2}}
-.btn-eq:hover{{background:var(--accent2)}}
-.btn-clear{{color:var(--red)}}
-.btn-zero{{grid-column:span 2;text-align:left;padding-left:28px}}
-.footer{{margin-top:20px;display:flex;align-items:center;justify-content:center;gap:8px}}
-.badge{{background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:var(--accent);font-size:.7rem;font-weight:600;padding:4px 12px;border-radius:20px;letter-spacing:.06em}}
-.status-dot{{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}}
-@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:.4}}}}
-</style>
-</head>
-<body>
-<div class="wrapper">
-  <div class="header">
-    <h1>{display_name}</h1>
-    <p>Python-powered — calculations run server-side</p>
-  </div>
-  <div class="calc">
-    <div class="display-area">
-      <div class="expr" id="expr">&nbsp;</div>
-      <div class="result" id="result">0</div>
-    </div>
-    <div class="history" id="history"></div>
-    <div class="buttons">
-      <button class="btn btn-clear" onclick="clr()">AC</button>
-      <button class="btn btn-op" onclick="ins('(-'">±</button>
-      <button class="btn btn-op" onclick="ins('/100')">%</button>
-      <button class="btn btn-op" onclick="ins('/'">÷</button>
-      <button class="btn" onclick="ins('7')">7</button>
-      <button class="btn" onclick="ins('8')">8</button>
-      <button class="btn" onclick="ins('9')">9</button>
-      <button class="btn btn-op" onclick="ins('*')">×</button>
-      <button class="btn" onclick="ins('4')">4</button>
-      <button class="btn" onclick="ins('5')">5</button>
-      <button class="btn" onclick="ins('6')">6</button>
-      <button class="btn btn-op" onclick="ins('-')">−</button>
-      <button class="btn" onclick="ins('1')">1</button>
-      <button class="btn" onclick="ins('2')">2</button>
-      <button class="btn" onclick="ins('3')">3</button>
-      <button class="btn btn-op" onclick="ins('+')">+</button>
-      <button class="btn btn-zero" onclick="ins('0')">0</button>
-      <button class="btn" onclick="ins('.')">.</button>
-      <button class="btn btn-eq" onclick="calc()">=</button>
-    </div>
-  </div>
-  <div class="footer">
-    <div class="status-dot"></div>
-    <span class="badge">⛽ GAS TOWN · PYTHON BACKEND</span>
-  </div>
-</div>
-<script>
-let expr = '';
-const exprEl = document.getElementById('expr');
-const resultEl = document.getElementById('result');
-const historyEl = document.getElementById('history');
-const history = [];
-
-function ins(v) {{
-  expr += v;
-  exprEl.textContent = expr;
-  resultEl.textContent = expr;
-  resultEl.className = 'result';
-}}
-
-function clr() {{
-  expr = '';
-  exprEl.textContent = '\\u00a0';
-  resultEl.textContent = '0';
-  resultEl.className = 'result';
-}}
-
-async function calc() {{
-  if (!expr) return;
-  resultEl.className = 'result computing';
-  resultEl.textContent = '...';
-  try {{
-    const res = await fetch('/api/calculate', {{
-      method: 'POST',
-      headers: {{'Content-Type': 'application/json'}},
-      body: JSON.stringify({{expression: expr}})
-    }});
-    const data = await res.json();
-    if (data.result === 'Error') {{
-      resultEl.textContent = 'Error';
-      resultEl.className = 'result error';
-    }} else {{
-      const r = String(data.result);
-      addHistory(expr + ' = ' + r);
-      exprEl.textContent = expr + ' =';
-      resultEl.textContent = r;
-      resultEl.className = 'result';
-      expr = r;
-    }}
-  }} catch(e) {{
-    resultEl.textContent = 'Error';
-    resultEl.className = 'result error';
-  }}
-}}
-
-function addHistory(entry) {{
-  history.unshift(entry);
-  if (history.length > 3) history.pop();
-  historyEl.innerHTML = history.map(h =>
-    `<div class="history-item" onclick="loadHistory('${{h.split(' = ')[0]}}')>${{h}}</div>`
-  ).join('');
-}}
-
-function loadHistory(e) {{ expr = e; exprEl.textContent = e; resultEl.textContent = e; }}
-
-document.addEventListener('keydown', e => {{
-  if ((e.key >= '0' && e.key <= '9') || ['+','-','*','/','.',',','(',')','^'].includes(e.key)) ins(e.key);
-  else if (e.key === 'Enter' || e.key === '=') calc();
-  else if (e.key === 'Backspace') {{ expr = expr.slice(0,-1); exprEl.textContent = expr||'\\u00a0'; resultEl.textContent = expr||'0'; }}
-  else if (e.key === 'Escape') clr();
-}});
-</script>
-</body></html>"""
+def _serve(filename: str) -> str:
+    p = BASE / "pages" / filename
+    if p.exists():
+        return p.read_text()
+    return f"<h2>{{filename}} not found</h2>"
 
 @app.get("/", response_class=HTMLResponse)
 def root():
-    # Serve pages/dashboard.html if agents wrote it, otherwise fallback to calculator
-    import os as _os
-    dashboard = _os.path.join(_os.path.dirname(__file__), "pages", "dashboard.html")
-    if _os.path.exists(dashboard):
-        with open(dashboard) as f:
-            return f.read()
-    return HTML
+    return _serve("dashboard.html")
 
 @app.get("/login", response_class=HTMLResponse)
-def login_page():
-    import os as _os
-    p = _os.path.join(_os.path.dirname(__file__), "pages", "login.html")
-    if _os.path.exists(p):
-        with open(p) as f:
-            return f.read()
-    return "<h1>Login</h1>"
+def login():
+    return _serve("login.html")
 
 @app.get("/api/health")
 def health():
     return {{"status": "ok", "project": "{project_name}"}}
 '''
-    # Create pages directory
+
+    # Create directories
+    # Create directories
     os.makedirs(os.path.join(project_dir, "pages"), exist_ok=True)
     os.makedirs(os.path.join(project_dir, "tests"), exist_ok=True)
 
     # Write main.py
-    full_main = os.path.join(project_dir, "main.py")
-    with open(full_main, "w") as f:
+    with open(os.path.join(project_dir, "main.py"), "w") as f:
         f.write(main_py)
+
+    # Write a proper placeholder dashboard (agents will overwrite this)
+    placeholder_dashboard = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{display_name}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="text-center max-w-md mx-auto p-8">
+    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+    </div>
+    <h1 class="text-2xl font-bold text-gray-900 mb-2">{display_name}</h1>
+    <p class="text-gray-500 text-sm">Built by Gas Town multi-agent system</p>
+    <div class="mt-6 inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-medium px-4 py-2 rounded-full">
+      <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+      Deployed successfully
+    </div>
+  </div>
+</body>
+</html>"""
+
+    with open(os.path.join(project_dir, "pages", "dashboard.html"), "w") as f:
+        f.write(placeholder_dashboard)
 
     # Write requirements.txt
     with open(os.path.join(project_dir, "requirements.txt"), "w") as f:
