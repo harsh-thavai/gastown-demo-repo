@@ -865,6 +865,7 @@ def _fix_missing_deps(project_dir):
     _fix_nextauth_routes(project_dir)
     _fix_invalid_route_exports(project_dir)
     _fix_nextconfig(project_dir)
+    _fix_vite_imports(project_dir)
 
     # Always ensure src/auth.ts exists (NextAuth v5 root config)
     auth_stub = os.path.join(project_dir, "src", "auth.ts")
@@ -1051,6 +1052,73 @@ def _fix_invalid_route_exports(project_dir):
             if changed:
                 with open(fpath, "w") as f:
                     f.write(modified)
+
+
+def _fix_vite_imports(project_dir):
+    """
+    Fix broken relative imports in Vite React projects.
+    Agents often write 'import X from ./X' but the file is at src/components/X.jsx.
+    Scan all .jsx/.js files, find unresolvable imports, search the project for the
+    actual file, and rewrite to the correct relative path.
+    """
+    import re as _re
+
+    # Build a map of filename (without ext) → relative path from src/
+    file_map = {}
+    for root, _, files in os.walk(os.path.join(project_dir, "src")):
+        for f in files:
+            if f.endswith((".jsx", ".js", ".tsx", ".ts", ".css")):
+                name = os.path.splitext(f)[0]
+                rel = os.path.relpath(os.path.join(root, f), project_dir)
+                rel = rel.replace("\\", "/")
+                file_map[name.lower()] = rel  # last write wins; good enough
+
+    import_re = _re.compile(r"""(from\s+['"])(\.[^'"]+)(['"])""")
+
+    for root, _, files in os.walk(os.path.join(project_dir, "src")):
+        if "node_modules" in root:
+            continue
+        for fname in files:
+            if not fname.endswith((".jsx", ".js", ".tsx", ".ts")):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath) as f:
+                    content = f.read()
+            except Exception:
+                continue
+
+            changed = False
+            def fix_import(m):
+                nonlocal changed
+                prefix, imp_path, suffix = m.group(1), m.group(2), m.group(3)
+                # Check if the import resolves as-is
+                base = os.path.normpath(os.path.join(os.path.dirname(fpath), imp_path))
+                for ext in ("", ".js", ".jsx", ".ts", ".tsx"):
+                    if os.path.exists(base + ext):
+                        return m.group(0)  # already valid
+                # Try to find the file by name
+                imp_name = os.path.basename(imp_path).lower()
+                if imp_name in file_map:
+                    target = file_map[imp_name]
+                    # Compute correct relative path from current file's dir
+                    current_dir = os.path.dirname(fpath)
+                    target_abs = os.path.join(project_dir, target)
+                    new_rel = os.path.relpath(target_abs, current_dir).replace("\\", "/")
+                    # Remove extension for JS imports
+                    new_rel = _re.sub(r'\.(jsx|tsx|js|ts)$', '', new_rel)
+                    if not new_rel.startswith("."):
+                        new_rel = "./" + new_rel
+                    changed = True
+                    return f"{prefix}{new_rel}{suffix}"
+                return m.group(0)
+
+            new_content = import_re.sub(fix_import, content)
+            if changed:
+                with open(fpath, "w") as f:
+                    f.write(new_content)
+                emit("mayor", "TASK_STARTED",
+                     f"Fixed imports in {os.path.relpath(fpath, project_dir)}")
 
 
 def _fix_nextconfig(project_dir):
