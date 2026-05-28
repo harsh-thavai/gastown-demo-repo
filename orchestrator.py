@@ -643,9 +643,14 @@ def _vercel_deploy_api(project_name, project_dir):
         output = result.stdout + result.stderr
         for line in output.splitlines():
             line = line.strip()
-            if line.startswith("https://") and "vercel.app" in line:
-                emit("vercel", "DEPLOYMENT_READY", f"Live: {line}", diff=line)
-                return line
+            if "vercel.app" in line and "https://" in line:
+                # Extract clean URL — strip anything after the domain
+                import re as _re
+                m = _re.search(r'https://[a-z0-9\-]+\.vercel\.app', line)
+                if m:
+                    deploy_url = m.group(0)
+                    emit("vercel", "DEPLOYMENT_READY", f"Live: {deploy_url}", diff=deploy_url)
+                    return deploy_url
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
