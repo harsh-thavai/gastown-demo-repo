@@ -404,10 +404,13 @@ Rules:
 - polecat-tests: writes tests
 - polecat-debug: security review
 - polecat-docs: writes README
-- polecat-review: builds the MAIN dashboard/home page with full UI (charts, cards, stats, nav)
-- For vite-react: use file paths like src/pages/Dashboard.jsx, src/components/Sidebar.jsx
-- For fastapi: use main.py serving HTML at root, src/pages/*.html for additional pages
-- EVERY page/component must have complete visual UI — no placeholder text"""
+- polecat-review: MUST target src/App.jsx for vite-react — the main entry point with FULL UI.
+  Import components from other agents. Include sidebar, stats cards, data table with mock data.
+  This is what users see when they open the app. Make it impressive.
+- For vite-react: polecat-auth → src/components/Login.jsx, polecat-debug → src/utils/api.js,
+  polecat-docs → README.md, polecat-review → src/App.jsx (MANDATORY — full dashboard UI)
+- For fastapi: main.py serves HTML with full UI at root
+- EVERY file must have complete working code — no placeholder text, no empty components"""
 
     raw = call_do_inference(system, f"Project description:\n{description}")
     raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
