@@ -16,7 +16,8 @@
   --red:#dc2626;--red-light:#fef2f2;--red-border:#fecaca;
   --amber:#d97706;--amber-light:#fffbeb;--amber-border:#fde68a;
   --purple:#7c3aed;--purple-light:#f5f3ff;--purple-border:#ddd6fe;
-  --teal:#0d9488;--teal-light:#f0fdfa;
+  --teal:#0d9488;--teal-light:#f0fdfa;--teal-border:#99f6e4;
+  --cyan:#0891b2;--cyan-light:#ecfeff;--cyan-border:#a5f3fc;
   --font:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
   --radius:8px;--radius-sm:5px;--radius-lg:12px;
   --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
@@ -24,54 +25,66 @@
 }
 html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;height:100%;overflow:hidden}
 
-/* SCROLLBAR */
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
 
 /* TOPBAR */
 .topbar{height:52px;background:var(--s1);border-bottom:1px solid var(--b1);
-        display:flex;align-items:center;gap:12px;padding:0 20px;flex-shrink:0;
+        display:flex;align-items:center;gap:10px;padding:0 16px;flex-shrink:0;
         box-shadow:var(--shadow)}
-.logo{display:flex;align-items:center;gap:8px}
-.logo-icon{font-size:18px}
+.logo{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.logo-icon{font-size:17px}
 .logo-text{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.02em}
-.logo-sub{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.06em;text-transform:uppercase}
-.topbar-sep{width:1px;height:20px;background:var(--b1)}
-.mode-toggle{display:flex;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:2px;gap:2px}
-.mode-btn{padding:4px 12px;border-radius:4px;font-family:var(--font);font-size:11px;font-weight:600;
+.logo-sub{font-size:9px;font-weight:600;color:var(--text3);letter-spacing:.06em;text-transform:uppercase}
+.topbar-sep{width:1px;height:20px;background:var(--b1);flex-shrink:0}
+.mode-toggle{display:flex;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:2px;gap:2px;flex-shrink:0}
+.mode-btn{padding:4px 10px;border-radius:4px;font-family:var(--font);font-size:11px;font-weight:600;
           cursor:pointer;border:none;transition:all .15s;color:var(--text3);background:transparent;letter-spacing:.02em}
-.mode-btn.active{background:var(--s1);color:var(--blue);border:1px solid var(--b1);
-                 box-shadow:var(--shadow)}
-.convoy-wrap{display:flex;align-items:center;gap:6px}
-.convoy-label{font-size:11px;color:var(--text3)}
-.convoy-value{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--text);
-              background:var(--s2);border:1px solid var(--b1);padding:2px 8px;border-radius:4px}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-.live-badge{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+.mode-btn.active{background:var(--s1);color:var(--blue);border:1px solid var(--b1);box-shadow:var(--shadow)}
+.convoy-wrap{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.convoy-label{font-size:10px;color:var(--text3)}
+.convoy-value{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--text);
+              background:var(--s2);border:1px solid var(--b1);padding:2px 7px;border-radius:4px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+/* LLM health badge */
+.llm-badge{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;
+           padding:3px 9px;border-radius:20px;cursor:pointer;transition:all .2s;
+           border:1px solid var(--b1);background:var(--s2);color:var(--text3)}
+.llm-badge.ok{color:var(--teal);background:var(--teal-light);border-color:var(--teal-border)}
+.llm-badge.error{color:var(--red);background:var(--red-light);border-color:var(--red-border)}
+.llm-badge.checking{color:var(--blue);background:var(--blue-light);border-color:var(--blue-border)}
+.llm-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.llm-badge.ok .llm-dot{animation:pulse-green 1.8s ease-in-out infinite}
+
+.live-badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;
             color:var(--green);background:var(--green-light);border:1px solid var(--green-border);
-            padding:3px 10px;border-radius:20px}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);
+            padding:3px 9px;border-radius:20px;flex-shrink:0}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);
           animation:pulse-green 1.4s ease-in-out infinite;flex-shrink:0}
-.disc-badge{display:none;align-items:center;gap:5px;font-size:11px;font-weight:600;
+.disc-badge{display:none;align-items:center;gap:5px;font-size:10px;font-weight:600;
             color:var(--red);background:var(--red-light);border:1px solid var(--red-border);
-            padding:3px 10px;border-radius:20px}
-.disc-dot{width:6px;height:6px;border-radius:50%;background:var(--red)}
+            padding:3px 9px;border-radius:20px;flex-shrink:0}
+.disc-dot{width:5px;height:5px;border-radius:50%;background:var(--red)}
 .vercel-link{display:none;align-items:center;gap:6px;background:var(--text);border:none;
-             border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;color:#fff;
-             text-decoration:none;transition:background .15s}
+             border-radius:6px;padding:5px 11px;font-size:11px;font-weight:600;color:#fff;
+             text-decoration:none;transition:background .15s;flex-shrink:0}
 .vercel-link:hover{background:#1e293b}
 .vercel-link.show{display:flex}
 .vercel-link-dot{width:5px;height:5px;border-radius:50%;background:#4ade80;
                  animation:pulse-green 1.4s ease-in-out infinite}
+.icon-btn{background:none;border:1px solid var(--b1);border-radius:6px;cursor:pointer;
+          padding:5px 8px;font-size:13px;color:var(--text3);transition:all .15s;flex-shrink:0}
+.icon-btn:hover{background:var(--s2);border-color:var(--b2);color:var(--text)}
 
 /* PIPELINE */
-.pipeline{height:48px;background:var(--s1);border-bottom:1px solid var(--b1);
-          display:flex;align-items:center;padding:0 20px;gap:0;flex-shrink:0}
+.pipeline{height:46px;background:var(--s1);border-bottom:1px solid var(--b1);
+          display:flex;align-items:center;padding:0 16px;gap:0;flex-shrink:0}
 .pipe-step{display:flex;align-items:center;gap:0;flex:1}
-.pipe-node{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:64px}
-.pipe-ring{width:26px;height:26px;border-radius:50%;border:2px solid var(--b2);
-           display:flex;align-items:center;justify-content:center;font-size:11px;
+.pipe-node{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:56px}
+.pipe-ring{width:24px;height:24px;border-radius:50%;border:2px solid var(--b2);
+           display:flex;align-items:center;justify-content:center;font-size:10px;
            transition:all .3s;background:var(--s2);color:var(--text3)}
 .pipe-ring.idle{border-color:var(--b2);background:var(--s2)}
 .pipe-ring.active{border-color:var(--blue);background:var(--blue-light);
@@ -80,10 +93,13 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
 .pipe-ring.stuck{border-color:var(--red-border);background:var(--red-light);
                  animation:ring-stuck 1s ease-in-out infinite}
 .pipe-ring.mayor-r.active{border-color:var(--blue);background:var(--blue-light)}
-.pipe-label{font-size:9px;font-weight:600;color:var(--text3);letter-spacing:.04em}
+.pipe-ring.coder-r.active{border-color:var(--teal);background:var(--teal-light)}
+.pipe-ring.coder-r.done{border-color:var(--teal-border);background:var(--teal-light);color:var(--teal)}
+.pipe-label{font-size:8px;font-weight:600;color:var(--text3);letter-spacing:.04em}
 .pipe-label.active{color:var(--blue)}
+.pipe-label.coder-active{color:var(--teal)}
 .pipe-label.stuck{color:var(--red)}
-.pipe-connector{flex:1;height:1px;background:var(--b1);margin:0 4px;position:relative;top:-9px}
+.pipe-connector{flex:1;height:1px;background:var(--b1);margin:0 3px;position:relative;top:-8px}
 .pipe-connector.active{background:var(--blue-border)}
 .progress-bar-wrap{height:2px;background:var(--s2);flex-shrink:0}
 .progress-bar{height:100%;background:linear-gradient(90deg,var(--blue),var(--teal));
@@ -91,45 +107,47 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
 
 /* BODY */
 .shell{display:flex;flex-direction:column;height:100vh}
-.body{display:grid;grid-template-columns:256px 1fr 288px;flex:1;overflow:hidden}
+.body{display:grid;grid-template-columns:252px 1fr 280px;flex:1;overflow:hidden}
 
 /* PANELS */
 .panel{background:var(--s1);border-right:1px solid var(--b1);display:flex;flex-direction:column;overflow:hidden}
 .panel:last-child{border-right:none}
-.panel-header{padding:10px 14px;border-bottom:1px solid var(--b1);font-size:10px;font-weight:700;
+.panel-header{padding:9px 13px;border-bottom:1px solid var(--b1);font-size:10px;font-weight:700;
               color:var(--text3);letter-spacing:.12em;text-transform:uppercase;
               display:flex;align-items:center;gap:6px;flex-shrink:0;background:var(--s2)}
 .ph-dot{width:4px;height:4px;border-radius:50%;background:var(--b2)}
-.panel-body{flex:1;overflow-y:auto;padding:12px}
+.panel-body{flex:1;overflow-y:auto;padding:10px}
 
 /* AGENT CARDS */
 .agent-card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--radius);
-            padding:11px 12px;margin-bottom:7px;transition:all .2s;box-shadow:var(--shadow)}
+            padding:10px 11px;margin-bottom:6px;transition:all .2s;box-shadow:var(--shadow)}
 .agent-card:hover{border-color:var(--b2)}
 .agent-card.active{border-color:var(--blue-border);background:var(--blue-light)}
+.agent-card.active-coder{border-color:var(--teal-border);background:var(--teal-light)}
 .agent-card.done{border-color:var(--green-border);background:var(--green-light);opacity:.85}
 .agent-card.stuck{border-color:var(--red-border);background:var(--red-light)}
 .agent-card.mayor{border-color:var(--blue-border);background:var(--blue-light)}
 .agent-card.deploying{border-color:var(--b2);animation:card-pulse 2s ease-in-out infinite}
-.card-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.agent-avatar{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;
-              justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;
+.card-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.agent-avatar{width:25px;height:25px;border-radius:6px;display:flex;align-items:center;
+              justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;
               font-family:var(--mono)}
 .agent-info{flex:1;min-width:0}
-.agent-name{font-size:12px;font-weight:600;letter-spacing:-.01em;
+.agent-name{font-size:11px;font-weight:600;letter-spacing:-.01em;
             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.agent-role{font-size:9px;font-weight:600;letter-spacing:.08em;color:var(--text3);
+.agent-role{font-size:9px;font-weight:600;letter-spacing:.07em;color:var(--text3);
             text-transform:uppercase;margin-top:1px}
-.status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-left:auto}
+.status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:auto}
 .sd-idle{background:var(--b2)}
 .sd-working{background:var(--blue);animation:pulse-blue 1.4s ease-in-out infinite}
+.sd-working-coder{background:var(--teal);animation:pulse-teal 1.4s ease-in-out infinite}
 .sd-done{background:var(--green)}
 .sd-stuck{background:var(--red);animation:blink 1s ease-in-out infinite}
 .sd-mayor{background:var(--blue);animation:pulse-blue 1.8s ease-in-out infinite}
 .sd-vercel{background:var(--text);animation:pulse-blue 1.5s ease-in-out infinite}
 .agent-task{font-size:10px;color:var(--text2);line-height:1.5;white-space:nowrap;
-            overflow:hidden;text-overflow:ellipsis;margin-bottom:7px}
-.card-tags{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:7px}
+            overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.card-tags{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:6px}
 .tag{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.04em}
 .tag-high{background:var(--red-light);color:var(--red);border:1px solid var(--red-border)}
 .tag-med{background:var(--amber-light);color:var(--amber);border:1px solid var(--amber-border)}
@@ -143,71 +161,98 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
 .act-btn:hover{color:var(--text);border-color:var(--b2);background:var(--s3)}
 .act-btn.success:hover{color:var(--green);border-color:var(--green-border);background:var(--green-light)}
 .act-btn.danger:hover{color:var(--red);border-color:var(--red-border);background:var(--red-light)}
-.card-connector{width:1px;height:7px;background:var(--b1);margin:0 0 0 12px}
+.card-connector{width:1px;height:6px;background:var(--b1);margin:0 0 0 11px}
 
 /* INPUT */
-.input-area{border-top:1px solid var(--b1);padding:12px;background:var(--s1);flex-shrink:0}
+.input-area{border-top:1px solid var(--b1);padding:10px;background:var(--s1);flex-shrink:0}
 .input-label{font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.1em;
-             text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+             text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center;gap:5px}
 .input-dot{width:5px;height:5px;border-radius:50%;background:var(--blue)}
 .notes-box{width:100%;background:var(--s2);border:1px solid var(--b1);
            border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);
            font-size:11px;padding:8px 10px;resize:none;outline:none;line-height:1.6;
-           transition:border-color .2s;margin-bottom:8px}
+           transition:border-color .2s;margin-bottom:7px}
 .notes-box:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
 .notes-box::placeholder{color:var(--text3)}
-.launch-btn{width:100%;background:var(--blue);border:none;color:#fff;
-            font-family:var(--font);font-size:12px;font-weight:600;padding:9px;
+.btn-row{display:flex;gap:6px;margin-bottom:7px}
+.launch-btn{flex:1;background:var(--blue);border:none;color:#fff;
+            font-family:var(--font);font-size:11px;font-weight:600;padding:8px;
             border-radius:var(--radius);cursor:pointer;letter-spacing:.02em;
-            transition:all .2s;display:flex;align-items:center;justify-content:center;gap:7px;
+            transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px;
             box-shadow:0 1px 2px rgba(37,99,235,.3)}
 .launch-btn:hover{background:var(--blue-dark);box-shadow:0 2px 8px rgba(37,99,235,.4)}
 .launch-btn.running{background:#d97706}
 .launch-btn.running:hover{background:#b45309}
 .launch-btn:disabled{opacity:.6;cursor:not-allowed}
+.demo-btn{background:var(--s2);border:1px solid var(--b1);color:var(--text2);
+          font-family:var(--font);font-size:11px;font-weight:600;padding:8px 12px;
+          border-radius:var(--radius);cursor:pointer;transition:all .15s;white-space:nowrap}
+.demo-btn:hover{background:var(--s3);border-color:var(--b2);color:var(--text)}
+
+/* QUERY SUGGESTIONS */
+.suggestions-toggle{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;
+                    color:var(--text3);letter-spacing:.08em;text-transform:uppercase;
+                    cursor:pointer;padding:4px 0;user-select:none;transition:color .15s}
+.suggestions-toggle:hover{color:var(--text2)}
+.sug-arrow{font-size:8px;transition:transform .2s}
+.sug-arrow.open{transform:rotate(90deg)}
+.suggestions-body{display:none;margin-top:6px}
+.suggestions-body.open{display:block}
+.sug-section{margin-bottom:8px}
+.sug-label{font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--text3);margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.sug-label-dot{width:3px;height:3px;border-radius:50%;background:currentColor}
+.sug-chip{display:inline-flex;align-items:center;background:var(--s2);border:1px solid var(--b1);
+          border-radius:4px;padding:3px 7px;font-size:9px;color:var(--text2);cursor:pointer;
+          margin:2px 2px 2px 0;transition:all .15s;line-height:1.4;max-width:100%}
+.sug-chip:hover{background:var(--blue-light);border-color:var(--blue-border);color:var(--blue)}
+.sug-chip.cant{cursor:default;opacity:.6}
+.sug-chip.cant:hover{background:var(--s2);border-color:var(--b1);color:var(--text2)}
+.sug-x{color:var(--red);margin-right:4px;font-size:8px}
+.sug-check{color:var(--green);margin-right:4px;font-size:8px}
 
 /* STREAMS */
-.stream-sec{margin-bottom:14px}
+.stream-sec{margin-bottom:12px}
 .stream-lbl{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-            margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--b1);
+            margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid var(--b1);
             display:flex;align-items:center;gap:6px;color:var(--text2)}
 .mayor-box{background:var(--blue-light);border:1px solid var(--blue-border);
-           border-radius:var(--radius);padding:10px 12px;font-family:var(--mono);
-           font-size:11px;line-height:1.8;color:var(--text)}
+           border-radius:var(--radius);padding:9px 11px;font-family:var(--mono);
+           font-size:10px;line-height:1.8;color:var(--text)}
 .mk{color:var(--blue);font-weight:600}.mv{color:var(--blue-dark)}.ms{color:var(--green)}
-.ml-cursor{display:inline-block;width:6px;height:12px;background:var(--blue);
+.ml-cursor{display:inline-block;width:6px;height:11px;background:var(--blue);
            margin-left:2px;vertical-align:middle;animation:blink 1.1s step-end infinite}
 .stream-bubble{background:var(--s1);border:1px solid var(--b1);border-left:3px solid var(--b2);
-               border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:9px 11px;
-               margin-bottom:5px;transition:border-color .3s;box-shadow:var(--shadow)}
+               border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:8px 10px;
+               margin-bottom:4px;transition:border-color .3s;box-shadow:var(--shadow)}
 .stream-bubble.auth{border-left-color:var(--blue)}
+.stream-bubble.coder{border-left-color:var(--teal)}
 .stream-bubble.tests{border-left-color:var(--purple)}
 .stream-bubble.debug{border-left-color:var(--red)}
 .stream-bubble.docs{border-left-color:var(--amber)}
 .stream-bubble.review{border-left-color:var(--green)}
 .stream-bubble.vercel{border-left-color:var(--text)}
-.sb-agent{font-size:9px;font-weight:700;letter-spacing:.06em;margin-bottom:4px;text-transform:uppercase}
+.sb-agent{font-size:9px;font-weight:700;letter-spacing:.06em;margin-bottom:3px;text-transform:uppercase}
 .sb-text{font-size:10px;color:var(--text2);line-height:1.7}
-.sb-diff{background:var(--s2);border:1px solid var(--b1);border-radius:3px;padding:6px 8px;
-         margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--text2);
-         line-height:1.6;overflow-x:auto;max-height:80px;white-space:pre}
+.sb-diff{background:var(--s2);border:1px solid var(--b1);border-radius:3px;padding:5px 7px;
+         margin-top:5px;font-family:var(--mono);font-size:10px;color:var(--text2);
+         line-height:1.6;overflow-x:auto;max-height:75px;white-space:pre}
 
 /* VERCEL BLOCK */
 .vercel-block{background:var(--s2);border:1px solid var(--b1);border-radius:var(--radius);
-              padding:12px;margin-bottom:7px;display:none;box-shadow:var(--shadow)}
+              padding:11px;margin-bottom:6px;display:none;box-shadow:var(--shadow)}
 .vercel-block.show{display:block}
-.vb-header{display:flex;align-items:center;gap:8px;margin-bottom:9px}
-.vb-logo{font-size:13px;font-weight:700;color:var(--text)}
-.vb-status{font-size:9px;padding:2px 8px;border-radius:3px;font-weight:700;letter-spacing:.06em}
+.vb-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.vb-logo{font-size:12px;font-weight:700;color:var(--text)}
+.vb-status{font-size:9px;padding:2px 7px;border-radius:3px;font-weight:700;letter-spacing:.06em}
 .vb-building{background:var(--amber-light);color:var(--amber);border:1px solid var(--amber-border)}
 .vb-ready{background:var(--green-light);color:var(--green);border:1px solid var(--green-border)}
-.vb-rows{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
+.vb-rows{display:flex;flex-direction:column;gap:3px;margin-bottom:7px}
 .vb-row{display:flex;justify-content:space-between;font-size:10px}
 .vb-key{color:var(--text3)}.vb-val{color:var(--text2);font-family:var(--mono);font-size:10px}
-.vb-url{color:var(--blue);text-decoration:none;font-family:var(--mono);
-        font-size:10px;word-break:break-all}
+.vb-url{color:var(--blue);text-decoration:none;font-family:var(--mono);font-size:10px;word-break:break-all}
 .vb-url:hover{color:var(--blue-dark);text-decoration:underline}
-.vb-log{background:var(--s1);border:1px solid var(--b1);border-radius:4px;padding:7px 9px;
+.vb-log{background:var(--s1);border:1px solid var(--b1);border-radius:4px;padding:7px 8px;
         font-family:var(--mono);font-size:10px;line-height:1.7;color:var(--text3)}
 .vb-log-line{animation:fadein .3s ease-out both}
 .vb-log-line:nth-child(1){animation-delay:.1s}
@@ -218,16 +263,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
 
 /* EVENT FEED */
 .event-item{background:var(--s1);border:1px solid var(--b1);border-radius:var(--radius-sm);
-            padding:8px 10px;margin-bottom:5px;animation:slide-in .2s ease-out;
+            padding:7px 9px;margin-bottom:4px;animation:slide-in .2s ease-out;
             box-shadow:var(--shadow);transition:border-color .15s}
 .event-item:hover{border-color:var(--b2)}
-.ev-header{display:flex;align-items:center;gap:5px;margin-bottom:3px}
-.ev-time{font-family:var(--mono);font-size:9px;color:var(--text3);min-width:52px}
-.ev-agent{font-size:8px;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.05em}
-.ev-type{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;
+.ev-header{display:flex;align-items:center;gap:4px;margin-bottom:3px}
+.ev-time{font-family:var(--mono);font-size:9px;color:var(--text3);min-width:50px}
+.ev-agent{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.05em}
+.ev-type{font-size:8px;font-weight:700;padding:2px 5px;border-radius:3px;
          letter-spacing:.04em;margin-left:auto}
-.ev-desc{font-size:10px;color:var(--text2);line-height:1.45}
-.ev-link{color:var(--blue);text-decoration:none;font-size:10px;display:block;margin-top:3px}
+.ev-desc{font-size:10px;color:var(--text2);line-height:1.4}
+.ev-link{color:var(--blue);text-decoration:none;font-size:10px;display:block;margin-top:2px}
 .ev-link:hover{color:var(--blue-dark);text-decoration:underline}
 
 /* Event type badges */
@@ -235,21 +280,46 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
 .t-task{background:var(--blue-light);color:var(--blue);border:1px solid var(--blue-border)}
 .t-code{background:var(--purple-light);color:var(--purple);border:1px solid var(--purple-border)}
 .t-pass{background:var(--green-light);color:var(--green);border:1px solid var(--green-border)}
-.t-pr{background:var(--teal-light);color:var(--teal);border:1px solid #99f6e4}
+.t-pr{background:var(--teal-light);color:var(--teal);border:1px solid var(--teal-border)}
 .t-merge{background:var(--blue-light);color:var(--blue);border:1px solid var(--blue-border)}
 .t-deploy{background:var(--s2);color:var(--text2);border:1px solid var(--b1)}
 .t-live{background:var(--text);color:#fff;border:1px solid var(--text)}
 .t-stuck{background:var(--red-light);color:var(--red);border:1px solid var(--red-border)}
 .t-convoy{background:var(--blue-light);color:var(--blue);border:1px solid var(--blue-border)}
 
+/* SETTINGS MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:1000;
+               display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+.modal-overlay.show{display:flex}
+.modal{background:var(--s1);border:1px solid var(--b1);border-radius:var(--radius-lg);
+       padding:20px;width:400px;box-shadow:0 20px 40px rgba(0,0,0,.15)}
+.modal-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-.01em}
+.modal-sub{font-size:11px;color:var(--text3);margin-bottom:14px;line-height:1.5}
+.modal-label{font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.06em;
+             text-transform:uppercase;margin-bottom:5px}
+.modal-input{width:100%;background:var(--s2);border:1px solid var(--b2);border-radius:6px;
+             color:var(--text);font-family:var(--mono);font-size:11px;padding:9px 11px;
+             outline:none;transition:border-color .15s;margin-bottom:10px}
+.modal-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+.modal-row{display:flex;gap:8px}
+.modal-btn{flex:1;padding:8px;border-radius:6px;font-family:var(--font);font-size:11px;
+           font-weight:600;cursor:pointer;transition:all .15s;border:1px solid var(--b1)}
+.modal-btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.modal-btn.primary:hover{background:var(--blue-dark)}
+.modal-btn.secondary{background:var(--s2);color:var(--text2)}
+.modal-btn.secondary:hover{background:var(--s3);color:var(--text)}
+.modal-hint{font-size:10px;color:var(--text3);margin-top:10px;padding-top:10px;
+            border-top:1px solid var(--b1);line-height:1.5}
+
 /* ANIMATIONS */
 @keyframes pulse-green{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(22,163,74,.3)}50%{opacity:.8;box-shadow:0 0 0 4px rgba(22,163,74,0)}}
 @keyframes pulse-blue{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(37,99,235,.3)}50%{opacity:.8;box-shadow:0 0 0 4px rgba(37,99,235,0)}}
+@keyframes pulse-teal{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(13,148,136,.3)}50%{opacity:.8;box-shadow:0 0 0 4px rgba(13,148,136,0)}}
 @keyframes ring-pulse-blue{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.2)}50%{box-shadow:0 0 0 4px rgba(37,99,235,0)}}
 @keyframes ring-stuck{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 @keyframes card-pulse{0%,100%{border-color:var(--b1)}50%{border-color:var(--b2)}}
-@keyframes slide-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slide-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadein{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
@@ -262,12 +332,13 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
       <span class="logo-icon">⛽</span>
       <div>
         <div class="logo-text">Gas Town</div>
+        <div class="logo-sub">Multi-Agent</div>
       </div>
     </div>
     <div class="topbar-sep"></div>
     <div class="mode-toggle">
-      <button class="mode-btn active" id="btn-fix" onclick="setMode('fix')">⚙ Fix Mode</button>
-      <button class="mode-btn" id="btn-build" onclick="setMode('build')">🏗 Build Mode</button>
+      <button class="mode-btn active" id="btn-fix" onclick="setMode('fix')">⚙ Fix</button>
+      <button class="mode-btn" id="btn-build" onclick="setMode('build')">🏗 Build</button>
     </div>
     <div class="topbar-sep"></div>
     <div class="convoy-wrap">
@@ -275,8 +346,14 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
       <span class="convoy-value" id="convoy-name">awaiting input</span>
     </div>
     <div class="topbar-right">
+      <!-- LLM Health -->
+      <div class="llm-badge checking" id="llm-badge" onclick="checkLLM()" title="Click to re-check LLM">
+        <div class="llm-dot"></div>
+        <span id="llm-text">LLM ...</span>
+      </div>
+      <!-- Live / Disconnected -->
       <a class="vercel-link" id="vercel-live-link" href="#" target="_blank">
-        <div class="vercel-link-dot"></div>Live on Vercel
+        <div class="vercel-link-dot"></div>Live
       </a>
       <div class="live-badge" id="live-indicator">
         <div class="live-dot"></div>Connected
@@ -284,6 +361,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
       <div class="disc-badge" id="disconnected-indicator">
         <div class="disc-dot"></div>Disconnected
       </div>
+      <!-- Settings -->
+      <button class="icon-btn" onclick="openSettings()" title="Configure bridge URL">⚙</button>
     </div>
   </div>
 
@@ -294,10 +373,11 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
   <!-- BODY -->
   <div class="body">
 
-    <!-- LEFT: AGENTS -->
+    <!-- LEFT: AGENTS + INPUT -->
     <div class="panel">
-      <div class="panel-header"><div class="ph-dot"></div>Agents
-        <span style="margin-left:auto;font-weight:400;color:var(--text3)" id="done-count-label">0 / 5 done</span>
+      <div class="panel-header">
+        <div class="ph-dot"></div>Agents
+        <span style="margin-left:auto;font-weight:400;color:var(--text3)" id="done-count-label">0 / 6 done</span>
       </div>
       <div class="panel-body" id="agent-panel">
 
@@ -335,6 +415,24 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
         </div>
         <div class="card-connector"></div>
 
+        <div class="agent-card" id="card-coder">
+          <div class="card-top">
+            <div class="agent-avatar" style="background:var(--teal-light);color:var(--teal)">CODE</div>
+            <div class="agent-info">
+              <div class="agent-name" style="color:var(--teal)">polecat-coder</div>
+              <div class="agent-role">Core Coder</div>
+            </div>
+            <div class="status-dot sd-idle" id="dot-coder"></div>
+          </div>
+          <div class="agent-task" id="task-coder">Idle — awaiting convoy</div>
+          <div class="card-tags"><span class="tag tag-high">HIGH</span></div>
+          <div class="card-actions">
+            <button class="act-btn success" onclick="overrideAgent('coder','done')">✓ Done</button>
+            <button class="act-btn danger" onclick="overrideAgent('coder','stuck')">⚠ Stuck</button>
+          </div>
+        </div>
+        <div class="card-connector"></div>
+
         <div class="agent-card" id="card-tests">
           <div class="card-top">
             <div class="agent-avatar" style="background:var(--purple-light);color:var(--purple)">TEST</div>
@@ -363,7 +461,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
             <div class="status-dot sd-idle" id="dot-debug"></div>
           </div>
           <div class="agent-task" id="task-debug">Waiting — OWASP+STRIDE ready</div>
-          <div class="card-tags"><span class="tag tag-high">HIGH</span><span class="tag tag-gstack">gstack /cso</span></div>
+          <div class="card-tags"><span class="tag tag-high">HIGH</span><span class="tag tag-gstack">OWASP</span></div>
           <div class="card-actions">
             <button class="act-btn success" onclick="overrideAgent('debug','done')">✓ Done</button>
             <button class="act-btn danger" onclick="overrideAgent('debug','stuck')">⚠ Stuck</button>
@@ -399,7 +497,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
             <div class="status-dot sd-idle" id="dot-review"></div>
           </div>
           <div class="agent-task" id="task-review">Idle — awaiting all diffs</div>
-          <div class="card-tags"><span class="tag tag-med">MED</span><span class="tag tag-gstack">gstack /review</span></div>
+          <div class="card-tags"><span class="tag tag-med">MED</span><span class="tag tag-gstack">gstack</span></div>
           <div class="card-actions">
             <button class="act-btn success" onclick="overrideAgent('review','done')">✓ Done</button>
             <button class="act-btn danger" onclick="overrideAgent('review','stuck')">⚠ Stuck</button>
@@ -426,14 +524,56 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
       <div class="input-area">
         <div class="input-label">
           <div class="input-dot"></div>
-          <span id="input-label-text">Standup Notes → Mayor → Agents → Vercel</span>
+          <span id="input-label-text">Standup Notes → Mayor → 6 Agents → Vercel</span>
         </div>
         <textarea class="notes-box" id="notes-input" rows="3"
-          placeholder="Paste standup notes — Mayor parses, agents ship, Vercel deploys...">Fix login auth bug ASAP, add rate limiting before launch, tests broken on user endpoint, README out of date, check new search route for SQL injection</textarea>
-        <button class="launch-btn" id="launch-btn" onclick="triggerDeploy()">
-          <span id="launch-icon">▶</span>
-          <span id="launch-text">Deploy Agents</span>
-        </button>
+          placeholder="Paste standup notes — Mayor parses, 6 agents ship, Vercel deploys...">Fix login auth bug ASAP, add rate limiting before launch, write core user service with CRUD, tests broken on user endpoint, README out of date, check new search route for SQL injection</textarea>
+        <div class="btn-row">
+          <button class="launch-btn" id="launch-btn" onclick="triggerDeploy()">
+            <span id="launch-icon">▶</span>
+            <span id="launch-text">Deploy Agents</span>
+          </button>
+          <button class="demo-btn" onclick="runDemo()" title="Run a simulated convoy">Demo</button>
+        </div>
+
+        <!-- Query Suggestions -->
+        <div>
+          <div class="suggestions-toggle" onclick="toggleSuggestions()">
+            <span class="sug-arrow" id="sug-arrow">▶</span>
+            What can I ask?
+          </div>
+          <div class="suggestions-body" id="suggestions-body">
+            <div class="sug-section">
+              <div class="sug-label" style="color:var(--green)">
+                <div class="sug-label-dot"></div>Fix Mode — works great
+              </div>
+              <span class="sug-chip" onclick="fillQuery(this)">Fix auth bug + add rate limiting + write tests</span>
+              <span class="sug-chip" onclick="fillQuery(this)">Add input validation to all endpoints</span>
+              <span class="sug-chip" onclick="fillQuery(this)">Refactor user service, update docs, security audit</span>
+              <span class="sug-chip" onclick="fillQuery(this)">Add pagination to list endpoints, update tests</span>
+            </div>
+            <div class="sug-section">
+              <div class="sug-label" style="color:var(--blue)">
+                <div class="sug-label-dot"></div>Build Mode — works great
+              </div>
+              <span class="sug-chip" onclick="fillQuery(this)">Build a todo app with user accounts and JWT auth</span>
+              <span class="sug-chip" onclick="fillQuery(this)">Create a REST API for inventory management</span>
+              <span class="sug-chip" onclick="fillQuery(this)">Build a blog with admin panel and markdown support</span>
+              <span class="sug-chip" onclick="fillQuery(this)">Build an expense tracker with charts and CSV export</span>
+              <span class="sug-chip" onclick="fillQuery(this)">Create a URL shortener with analytics dashboard</span>
+            </div>
+            <div class="sug-section">
+              <div class="sug-label" style="color:var(--red)">
+                <div class="sug-label-dot"></div>Not possible (current limits)
+              </div>
+              <span class="sug-chip cant"><span class="sug-x">✗</span>Access external databases without credentials</span>
+              <span class="sug-chip cant"><span class="sug-x">✗</span>iOS / Android native apps (web only)</span>
+              <span class="sug-chip cant"><span class="sug-x">✗</span>Paid APIs without keys (Stripe, Twilio…)</span>
+              <span class="sug-chip cant"><span class="sug-x">✗</span>Browser automation / Selenium tests</span>
+              <span class="sug-chip cant"><span class="sug-x">✗</span>Fix production crashes without server logs</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -446,7 +586,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
           <div class="stream-lbl" style="color:var(--blue)">👑 Mayor — Live Reasoning</div>
           <div class="mayor-box" id="mayor-log">
             <div><span class="mk">input</span>: <span class="mv">"<span id="mayor-preview">paste standup notes to begin...</span>"</span></div>
-            <div id="mayor-plan" style="color:var(--text3);font-style:italic;margin-top:5px">Awaiting task input...</div>
+            <div id="mayor-plan" style="color:var(--text3);font-style:italic;margin-top:4px">Awaiting task input...</div>
           </div>
         </div>
 
@@ -459,6 +599,14 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
         </div>
 
         <div class="stream-sec">
+          <div class="stream-lbl" style="color:var(--teal)">polecat-coder <span style="font-size:8px;background:var(--teal-light);color:var(--teal);border:1px solid var(--teal-border);padding:1px 5px;border-radius:3px;font-weight:700;letter-spacing:.04em">CORE</span></div>
+          <div class="stream-bubble coder">
+            <div class="sb-agent" style="color:var(--teal)">polecat-coder · CORE CODER</div>
+            <div class="sb-text" id="tc-coder" style="color:var(--text3);font-style:italic">Idle — awaiting convoy...</div>
+          </div>
+        </div>
+
+        <div class="stream-sec">
           <div class="stream-lbl" style="color:var(--purple)">polecat-tests</div>
           <div class="stream-bubble tests">
             <div class="sb-agent" style="color:var(--purple)">polecat-tests · TEST ENGINEER</div>
@@ -467,15 +615,15 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
         </div>
 
         <div class="stream-sec">
-          <div class="stream-lbl" style="color:var(--red)">polecat-debug <span class="tag tag-gstack" style="font-size:8px">gstack /cso</span></div>
+          <div class="stream-lbl" style="color:var(--red)">polecat-debug <span style="font-size:8px;background:var(--red-light);color:var(--red);border:1px solid var(--red-border);padding:1px 5px;border-radius:3px;font-weight:700;letter-spacing:.04em">OWASP+STRIDE</span></div>
           <div class="stream-bubble debug">
-            <div class="sb-agent" style="color:var(--red)">polecat-debug · OWASP+STRIDE</div>
+            <div class="sb-agent" style="color:var(--red)">polecat-debug · SECURITY AUDITOR</div>
             <div class="sb-text" id="tc-debug" style="color:var(--text3);font-style:italic">Idle — waiting for diffs...</div>
           </div>
         </div>
 
         <div class="stream-sec">
-          <div class="stream-lbl" style="color:var(--green)">polecat-review <span class="tag tag-gstack" style="font-size:8px">gstack /review</span></div>
+          <div class="stream-lbl" style="color:var(--green)">polecat-review <span style="font-size:8px;background:var(--green-light);color:var(--green);border:1px solid var(--green-border);padding:1px 5px;border-radius:3px;font-weight:700;letter-spacing:.04em">gstack</span></div>
           <div class="stream-bubble review">
             <div class="sb-agent" style="color:var(--green)">polecat-review · STAFF ENGINEER</div>
             <div class="sb-text" id="tc-review" style="color:var(--text3);font-style:italic">Idle — waiting for diffs...</div>
@@ -501,7 +649,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
             <div class="vb-log-line">✓ Installing dependencies...</div>
             <div class="vb-log-line">✓ Building application...</div>
             <div class="vb-log-line" id="vd-log-4" style="display:none">✓ Optimizing output...</div>
-            <div class="vb-log-line" id="vd-log-5" style="display:none" style="color:var(--green)">✓ Deployment complete</div>
+            <div class="vb-log-line" id="vd-log-5" style="display:none;color:var(--green)">✓ Deployment complete</div>
           </div>
         </div>
 
@@ -520,48 +668,110 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-si
   </div>
 </div>
 
-<script>
-const BRIDGE = (window.BRIDGE_URL || 'https://therapeutic-kijiji-eyes-census.trycloudflare.com');
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-title">⚙ Bridge Settings</div>
+    <div class="modal-sub">Configure the FastAPI bridge URL. Use your Cloudflare tunnel URL when running remotely, or localhost for local development.</div>
+    <div class="modal-label">Bridge URL</div>
+    <input class="modal-input" id="bridge-url-input" type="text" placeholder="https://your-tunnel.trycloudflare.com" />
+    <div class="modal-row">
+      <button class="modal-btn secondary" onclick="closeSettings()">Cancel</button>
+      <button class="modal-btn primary" onclick="saveBridgeUrl()">Save &amp; Reconnect</button>
+    </div>
+    <div class="modal-hint">
+      Start your server: <code style="font-family:var(--mono);font-size:10px">bash scripts/start.sh</code><br>
+      The tunnel URL is printed after startup. Paste it here.
+    </div>
+  </div>
+</div>
 
-// Pipeline
+<script>
+// ── bridge URL (configurable via settings) ────────────────────────────────────
+function getBridge(){
+  return localStorage.getItem('gastown-bridge') ||
+         (window.BRIDGE_URL || 'https://committee-settled-bouquet-blast.trycloudflare.com');
+}
+let BRIDGE = getBridge();
+
+// ── pipeline ──────────────────────────────────────────────────────────────────
 const PIPE_NODES = [
-  {id:'mayor',label:'Mayor',icon:'👑'},
-  {id:'auth',label:'Auth',icon:'🔐'},
-  {id:'tests',label:'Tests',icon:'🧪'},
-  {id:'debug',label:'Security',icon:'🛡'},
-  {id:'docs',label:'Docs',icon:'📄'},
-  {id:'review',label:'Review',icon:'👀'},
-  {id:'deploy',label:'Deploy',icon:'▲'},
+  {id:'mayor', label:'Mayor',   icon:'👑',  cls:'mayor-r'},
+  {id:'auth',  label:'Auth',    icon:'🔐',  cls:''},
+  {id:'coder', label:'Coder',   icon:'💻',  cls:'coder-r'},
+  {id:'tests', label:'Tests',   icon:'🧪',  cls:''},
+  {id:'debug', label:'Sec',     icon:'🛡',  cls:''},
+  {id:'docs',  label:'Docs',    icon:'📄',  cls:''},
+  {id:'review',label:'Review',  icon:'👀',  cls:''},
+  {id:'deploy',label:'Deploy',  icon:'▲',   cls:''},
 ];
 (function(){
   const p=document.getElementById('pipeline');
   PIPE_NODES.forEach((n,i)=>{
     const s=document.createElement('div');s.className='pipe-step';
-    s.innerHTML=`<div class="pipe-node"><div class="pipe-ring ${n.id==='mayor'?'mayor-r':''} idle" id="pr-${n.id}">${n.icon}</div><div class="pipe-label" id="pl-${n.id}">${n.label}</div></div>`;
+    s.innerHTML=`<div class="pipe-node"><div class="pipe-ring ${n.cls} idle" id="pr-${n.id}">${n.icon}</div><div class="pipe-label" id="pl-${n.id}">${n.label}</div></div>`;
     if(i<PIPE_NODES.length-1) s.innerHTML+=`<div class="pipe-connector" id="pc-${n.id}"></div>`;
     p.appendChild(s);
   });
 })();
 
-// SSE
-const sse=new EventSource(`${BRIDGE}/events`);
-sse.onmessage=e=>{try{handleEvent(JSON.parse(e.data));}catch(_){}};
-sse.onopen=()=>{
-  document.getElementById('live-indicator').style.display='flex';
-  document.getElementById('disconnected-indicator').style.display='none';
-};
-sse.onerror=()=>{
-  document.getElementById('live-indicator').style.display='none';
-  document.getElementById('disconnected-indicator').style.display='flex';
-};
+// ── SSE connection ────────────────────────────────────────────────────────────
+let sse=null;
+function connectSSE(){
+  if(sse){try{sse.close();}catch(_){}}
+  sse=new EventSource(`${BRIDGE}/events`);
+  sse.onmessage=e=>{try{handleEvent(JSON.parse(e.data));}catch(_){}};
+  sse.onopen=()=>{
+    document.getElementById('live-indicator').style.display='flex';
+    document.getElementById('disconnected-indicator').style.display='none';
+  };
+  sse.onerror=()=>{
+    document.getElementById('live-indicator').style.display='none';
+    document.getElementById('disconnected-indicator').style.display='flex';
+  };
+}
+connectSSE();
 
-// Color map
+// ── LLM health check ──────────────────────────────────────────────────────────
+function checkLLM(){
+  const badge=document.getElementById('llm-badge');
+  const txt=document.getElementById('llm-text');
+  badge.className='llm-badge checking';
+  txt.textContent='LLM ...';
+  fetch(`${BRIDGE}/llm-health`)
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.status==='ok'){
+        badge.className='llm-badge ok';
+        txt.textContent=`LLM ${d.latency_ms|0}ms`;
+        badge.title=`Model: ${d.model} | Latency: ${d.latency_ms}ms | Reply: "${d.reply}"`;
+      } else if(d.status==='unconfigured'){
+        badge.className='llm-badge';
+        txt.textContent='LLM N/A';
+        badge.title='LLM not configured — set DO_INFERENCE_URL and MODEL_ACCESS_KEY in .env';
+      } else {
+        badge.className='llm-badge error';
+        txt.textContent='LLM ERR';
+        badge.title=d.message||'LLM error';
+      }
+    })
+    .catch(()=>{
+      badge.className='llm-badge error';
+      txt.textContent='LLM ?';
+      badge.title='Could not reach bridge — is it running?';
+    });
+}
+checkLLM();
+setInterval(checkLLM, 30000);
+
+// ── colour map ────────────────────────────────────────────────────────────────
 const COLORS={
-  mayor:{c:'#2563eb',bg:'#eff6ff',b:'#bfdbfe'},
-  auth:{c:'#2563eb',bg:'#eff6ff',b:'#bfdbfe'},
-  tests:{c:'#7c3aed',bg:'#f5f3ff',b:'#ddd6fe'},
-  debug:{c:'#dc2626',bg:'#fef2f2',b:'#fecaca'},
-  docs:{c:'#d97706',bg:'#fffbeb',b:'#fde68a'},
+  mayor: {c:'#2563eb',bg:'#eff6ff',b:'#bfdbfe'},
+  auth:  {c:'#2563eb',bg:'#eff6ff',b:'#bfdbfe'},
+  coder: {c:'#0d9488',bg:'#f0fdfa',b:'#99f6e4'},
+  tests: {c:'#7c3aed',bg:'#f5f3ff',b:'#ddd6fe'},
+  debug: {c:'#dc2626',bg:'#fef2f2',b:'#fecaca'},
+  docs:  {c:'#d97706',bg:'#fffbeb',b:'#fde68a'},
   review:{c:'#16a34a',bg:'#f0fdf4',b:'#bbf7d0'},
   vercel:{c:'#0f172a',bg:'#f8fafc',b:'#e2e8f0'},
 };
@@ -574,6 +784,7 @@ function typeClass(t){
   return m[t]||'t-task';
 }
 
+// ── event feed ────────────────────────────────────────────────────────────────
 let evCount=0;
 function injectEvent(role,type,text,url){
   const s=COLORS[role]||COLORS.auth;
@@ -587,6 +798,7 @@ function injectEvent(role,type,text,url){
   document.getElementById('event-count').textContent=evCount+' event'+(evCount===1?'':'s');
 }
 
+// ── agent state ───────────────────────────────────────────────────────────────
 let doneCount=0;
 function setAgent(role,state,txt){
   const dot=document.getElementById('dot-'+role);
@@ -595,29 +807,36 @@ function setAgent(role,state,txt){
   const pr=document.getElementById('pr-'+role);
   const pl=document.getElementById('pl-'+role);
   if(!dot) return;
-  const dotMap={working:'sd-working',done:'sd-done',stuck:'sd-stuck',vercel:'sd-vercel',mayor:'sd-mayor',idle:'sd-idle'};
+  const dotMap={
+    working:role==='coder'?'sd-working-coder':'sd-working',
+    done:'sd-done',stuck:'sd-stuck',vercel:'sd-vercel',mayor:'sd-mayor',idle:'sd-idle'
+  };
   dot.className='status-dot '+(dotMap[state]||'sd-idle');
   if(card){
     card.className='agent-card';
     if(role==='mayor') card.classList.add('mayor');
-    if(state==='working') card.classList.add('active');
+    if(state==='working') card.classList.add(role==='coder'?'active-coder':'active');
     if(state==='done') card.classList.add('done');
     if(state==='stuck') card.classList.add('stuck');
     if(state==='vercel') card.classList.add('deploying');
   }
   if(task&&txt) task.textContent=txt;
   if(pr){
-    pr.className='pipe-ring'+(role==='mayor'?' mayor-r':'');
+    pr.className='pipe-ring'+(role==='mayor'?' mayor-r':role==='coder'?' coder-r':'');
     if(state==='working') pr.classList.add('active');
     else if(state==='done') pr.classList.add('done');
     else if(state==='stuck') pr.classList.add('stuck');
     else pr.classList.add('idle');
   }
-  if(pl){pl.className='pipe-label';if(state==='working')pl.classList.add('active');if(state==='stuck')pl.classList.add('stuck');}
+  if(pl){
+    pl.className='pipe-label';
+    if(state==='working') pl.classList.add(role==='coder'?'coder-active':'active');
+    if(state==='stuck') pl.classList.add('stuck');
+  }
   if(state==='done'){
-    doneCount=Math.min(doneCount+1,5);
-    document.getElementById('progress-bar').style.width=(doneCount/5*100)+'%';
-    document.getElementById('done-count-label').textContent=doneCount+' / 5 done';
+    doneCount=Math.min(doneCount+1,6);
+    document.getElementById('progress-bar').style.width=(doneCount/6*100)+'%';
+    document.getElementById('done-count-label').textContent=doneCount+' / 6 done';
     const pc=document.getElementById('pc-'+role);
     if(pc) pc.classList.add('active');
   }
@@ -631,7 +850,7 @@ function updateMayorLog(notes,convoyName){
   document.getElementById('mayor-preview').textContent=notes.substring(0,55)+'...';
   const p=document.getElementById('mayor-plan');
   p.style.fontStyle='normal';p.style.color='var(--blue-dark)';
-  p.innerHTML=`<span class="mk">convoy</span>: <span class="mv">"${convoyName}"</span>\n<span class="mk">status</span>: <span style="color:var(--green)">DISPATCHING<span class="ml-cursor"></span></span>`;
+  p.innerHTML=`<span class="mk">convoy</span>: <span class="mv">"${convoyName}"</span>\n<span class="mk">agents</span>: <span style="color:var(--text2)">6 polecats dispatched</span>\n<span class="mk">status</span>: <span style="color:var(--green)">DISPATCHING<span class="ml-cursor"></span></span>`;
   document.getElementById('convoy-name').textContent=convoyName.toUpperCase();
 }
 let vercelTimer=null;
@@ -639,7 +858,11 @@ function showVercelDeploy(){
   document.getElementById('card-deploy').style.display='block';
   setAgent('deploy','vercel','Deploying to Vercel...');
   document.getElementById('vercel-block').classList.add('show');
-  let s=0;vercelTimer=setInterval(()=>{s++;document.getElementById('vd-elapsed').textContent=s+'s';if(s===8)document.getElementById('vd-log-4').style.display='block';},1000);
+  let s=0;
+  vercelTimer=setInterval(()=>{
+    s++;document.getElementById('vd-elapsed').textContent=s+'s';
+    if(s===8) document.getElementById('vd-log-4').style.display='block';
+  },1000);
 }
 function finishVercelDeploy(url){
   if(vercelTimer){clearInterval(vercelTimer);vercelTimer=null;}
@@ -654,13 +877,17 @@ function finishVercelDeploy(url){
   document.getElementById('task-mayor').textContent='Convoy complete ✓ Live on Vercel';
 }
 
+// ── event handler ─────────────────────────────────────────────────────────────
 function handleEvent(ev){
   const role=ev.agent_role||ev.agent.replace('polecat-','');
   const url=(ev.type==='PR_OPENED'||ev.type==='DEPLOYMENT_READY')&&ev.diff?ev.diff:null;
   injectEvent(role,ev.type,ev.text,url);
   updateStream(role,ev.text);
-  const stateMap={AGENT_SPAWNED:'working',TASK_STARTED:'working',CODE_WRITTEN:'working',
-    CSO_RUNNING:'working',AUDIT_DONE:'done',REVIEW_PASSED:'done',CONVOY_COMPLETE:'done',AGENT_STUCK:'stuck'};
+  const stateMap={
+    AGENT_SPAWNED:'working',TASK_STARTED:'working',CODE_WRITTEN:'working',
+    CSO_RUNNING:'working',AUDIT_DONE:'done',REVIEW_PASSED:'done',
+    CONVOY_COMPLETE:'done',AGENT_STUCK:'stuck'
+  };
   if(stateMap[ev.type]) setAgent(role,stateMap[ev.type],ev.text);
   if(ev.type==='CONVOY_CREATED'){
     updateMayorLog(document.getElementById('notes-input').value,ev.text.split(' — ')[0].replace('Convoy: ',''));
@@ -676,6 +903,7 @@ function handleEvent(ev){
   }
 }
 
+// ── mode toggle ───────────────────────────────────────────────────────────────
 let currentMode='fix';
 function setMode(m){
   currentMode=m;
@@ -685,30 +913,27 @@ function setMode(m){
   const ph=document.getElementById('notes-input');
   const btnText=document.getElementById('launch-text');
   if(m==='build'){
-    lbl.textContent='Project Description → Mayor → Scaffold → GitHub → Vercel';
-    ph.placeholder='Describe what to build — e.g. "React calculator app with history"';
+    lbl.textContent='Project Description → Mayor → 6 Agents → GitHub → Vercel';
+    ph.placeholder='Describe what to build — e.g. "Todo app with user accounts and JWT auth"';
     ph.value='';btnText.textContent='Build Project';
   } else {
-    lbl.textContent='Standup Notes → Mayor → Agents → Vercel';
+    lbl.textContent='Standup Notes → Mayor → 6 Agents → Vercel';
     ph.placeholder='Paste standup notes...';
-    ph.value='Fix login auth bug ASAP, add rate limiting before launch, tests broken on user endpoint, README out of date, check new search route for SQL injection';
+    ph.value='Fix login auth bug ASAP, add rate limiting before launch, write core user service with CRUD, tests broken on user endpoint, README out of date, check new search route for SQL injection';
     btnText.textContent='Deploy Agents';
   }
 }
 
-async function triggerDeploy(){
-  const notes=document.getElementById('notes-input').value.trim();
-  if(!notes) return;
-  const btn=document.getElementById('launch-btn');
-  btn.classList.add('running');btn.disabled=true;
-  document.getElementById('launch-icon').textContent='⏸';
-  document.getElementById('launch-text').textContent='Running...';
+// ── deploy trigger ────────────────────────────────────────────────────────────
+function resetUI(){
   doneCount=0;evCount=0;
   document.getElementById('progress-bar').style.width='0%';
-  document.getElementById('done-count-label').textContent='0 / 5 done';
+  document.getElementById('done-count-label').textContent='0 / 6 done';
   document.getElementById('event-count').textContent='0 events';
   document.getElementById('convoy-name').textContent='planning...';
-  ['auth','tests','debug','docs','review','deploy'].forEach(r=>setAgent(r,'idle','Awaiting convoy...'));
+  document.getElementById('event-feed').innerHTML='';
+  ['auth','coder','tests','debug','docs','review','deploy'].forEach(r=>setAgent(r,'idle','Awaiting convoy...'));
+  setAgent('mayor','mayor','Awaiting notes...');
   document.getElementById('card-deploy').style.display='none';
   document.getElementById('vercel-block').classList.remove('show');
   document.getElementById('vercel-live-link').classList.remove('show');
@@ -716,21 +941,85 @@ async function triggerDeploy(){
   document.getElementById('vd-status').className='vb-status vb-building';
   ['vd-log-4','vd-log-5'].forEach(id=>document.getElementById(id).style.display='none');
   document.getElementById('vd-url-row').style.display='none';
+}
 
+async function triggerDeploy(){
+  const notes=document.getElementById('notes-input').value.trim();
+  if(!notes) return;
+  resetUI();
+  const btn=document.getElementById('launch-btn');
+  btn.classList.add('running');btn.disabled=true;
+  document.getElementById('launch-icon').textContent='⏸';
+  document.getElementById('launch-text').textContent='Running...';
   const endpoint=currentMode==='build'?`${BRIDGE}/build`:`${BRIDGE}/task`;
   try{
-    await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes})});
+    await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({notes,description:notes})});
   }catch(e){
-    console.warn('Bridge POST failed, using demo');
-    await fetch(`${BRIDGE}/demo/start`,{method:'POST'});
+    console.warn('Bridge POST failed, falling back to demo');
+    runDemo();
   }
 }
 
+async function runDemo(){
+  resetUI();
+  const btn=document.getElementById('launch-btn');
+  btn.classList.add('running');btn.disabled=true;
+  document.getElementById('launch-icon').textContent='⏸';
+  document.getElementById('launch-text').textContent='Demo running...';
+  try{
+    await fetch(`${BRIDGE}/demo/start`,{method:'POST'});
+  }catch(e){
+    btn.classList.remove('running');btn.disabled=false;
+    document.getElementById('launch-text').textContent=currentMode==='build'?'Build Project':'Deploy Agents';
+    document.getElementById('launch-icon').textContent='▶';
+    alert('Cannot reach bridge at '+BRIDGE+'\nClick ⚙ to update the bridge URL.');
+  }
+}
+
+// ── manual overrides ──────────────────────────────────────────────────────────
 function overrideAgent(role,action){
   if(action==='done'){setAgent(role,'done','Done (override)');injectEvent(role,'MANUAL_OVERRIDE',`${role} advanced to DONE`);}
   else if(action==='stuck'){setAgent(role,'stuck','STUCK');injectEvent(role,'AGENT_STUCK',`${role} marked stuck`);}
   else if(action==='skip'){injectEvent('mayor','STEP_SKIPPED','Mayor step skipped — convoy continuing');}
 }
+
+// ── suggestions ───────────────────────────────────────────────────────────────
+function toggleSuggestions(){
+  const body=document.getElementById('suggestions-body');
+  const arrow=document.getElementById('sug-arrow');
+  const open=body.classList.toggle('open');
+  arrow.classList.toggle('open',open);
+}
+function fillQuery(chip){
+  const txt=chip.textContent.trim();
+  document.getElementById('notes-input').value=txt;
+  // Detect mode from chip
+  const sec=chip.closest('.sug-section');
+  const lbl=sec.querySelector('.sug-label').textContent;
+  if(lbl.includes('Build')) setMode('build'); else setMode('fix');
+}
+
+// ── settings modal ────────────────────────────────────────────────────────────
+function openSettings(){
+  document.getElementById('bridge-url-input').value=BRIDGE;
+  document.getElementById('settings-modal').classList.add('show');
+}
+function closeSettings(){
+  document.getElementById('settings-modal').classList.remove('show');
+}
+function saveBridgeUrl(){
+  const url=document.getElementById('bridge-url-input').value.trim().replace(/\/+$/,'');
+  if(!url) return;
+  BRIDGE=url;
+  localStorage.setItem('gastown-bridge',url);
+  closeSettings();
+  connectSSE();
+  checkLLM();
+}
+document.getElementById('settings-modal').addEventListener('click',function(e){
+  if(e.target===this) closeSettings();
+});
 </script>
 </body>
 </html>

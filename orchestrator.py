@@ -27,7 +27,7 @@ TMP_DIR          = os.environ.get("TMPDIR") or os.environ.get("TMP") \
                    or os.environ.get("TEMP") or tempfile.gettempdir()
 DO_INFERENCE_URL = os.environ.get("DO_INFERENCE_URL", "").rstrip("/")
 MODEL_ACCESS_KEY = os.environ.get("MODEL_ACCESS_KEY", "")
-BRIDGE_URL       = os.environ.get("BRIDGE_URL", "http://localhost:8080/ingest")
+BRIDGE_URL       = os.environ.get("BRIDGE_URL", "http://localhost:8000/ingest")
 BRIDGE_SECRET    = os.environ.get("BRIDGE_SECRET", "gastown-demo-2026")
 VERCEL_TOKEN     = os.environ.get("VERCEL_TOKEN", "")
 VERCEL_PROJECT   = os.environ.get("VERCEL_PROJECT", "gastown-demo")
@@ -37,6 +37,7 @@ MODEL            = os.environ.get("MODEL", "deepseek-v4-pro")
 
 WORKTREES = {
     "polecat-auth":   os.path.expanduser("~/gastown/wt-auth"),
+    "polecat-coder":  os.path.expanduser("~/gastown/wt-coder"),
     "polecat-tests":  os.path.expanduser("~/gastown/wt-tests"),
     "polecat-debug":  os.path.expanduser("~/gastown/wt-debug"),
     "polecat-docs":   os.path.expanduser("~/gastown/wt-docs"),
@@ -52,6 +53,8 @@ DRY_RUN_PLAN = {
     "tasks": [
         {"agent": "polecat-auth",   "task": "Add JWT middleware to /users and /search routes",
          "priority": "HIGH",   "file": "src/auth/jwt.go"},
+        {"agent": "polecat-coder",  "task": "Implement core user service with CRUD operations",
+         "priority": "HIGH",   "file": "src/services/user_service.go"},
         {"agent": "polecat-tests",  "task": "Write table-driven tests for JWT middleware",
          "priority": "HIGH",   "file": "tests/auth_test.go"},
         {"agent": "polecat-debug",  "task": "OWASP+STRIDE audit of server.go and jwt.go",
@@ -66,18 +69,20 @@ DRY_RUN_PLAN = {
 DRY_RUN_BUILD_PLAN = {
     "convoy": "SaaS Dashboard Build",
     "project_name": "saas-dashboard",
-    "framework": "nextjs",
+    "framework": "fastapi",
     "tasks": [
-        {"agent": "polecat-auth",   "task": "Scaffold NextAuth.js login/register pages with JWT",
-         "priority": "HIGH",   "file": "src/app/auth/login/page.tsx"},
-        {"agent": "polecat-tests",  "task": "Write Jest tests for auth and dashboard components",
-         "priority": "HIGH",   "file": "src/__tests__/auth.test.tsx"},
-        {"agent": "polecat-debug",  "task": "Security audit of auth flow and Stripe webhook",
-         "priority": "HIGH",   "file": "src/app/api/webhook/route.ts"},
-        {"agent": "polecat-docs",   "task": "Write README with setup, env vars, deploy steps",
+        {"agent": "polecat-auth",   "task": "Build login/register HTML page with JWT form and inline JS",
+         "priority": "HIGH",   "file": "pages/login.html"},
+        {"agent": "polecat-coder",  "task": "Implement core business logic routes and data models in main.py",
+         "priority": "HIGH",   "file": "pages/core.py"},
+        {"agent": "polecat-tests",  "task": "Write pytest tests for auth routes and core endpoints",
+         "priority": "HIGH",   "file": "tests/test_api.py"},
+        {"agent": "polecat-debug",  "task": "Security audit of auth flow and API endpoints",
+         "priority": "HIGH",   "file": "pages/api.py"},
+        {"agent": "polecat-docs",   "task": "Write README with setup, env vars, and deploy steps",
          "priority": "LOW",    "file": "README.md"},
-        {"agent": "polecat-review", "task": "Final review and polish of all scaffolded files",
-         "priority": "MEDIUM", "file": "src/app/dashboard/page.tsx"},
+        {"agent": "polecat-review", "task": "Final review and polish — write the main dashboard HTML",
+         "priority": "MEDIUM", "file": "pages/dashboard.html"},
     ]
 }
 
@@ -241,15 +246,20 @@ Respond ONLY with valid JSON, no markdown fences:
   "convoy": "sprint name 2-4 words",
   "tasks": [
     {
-      "agent": "polecat-auth|polecat-tests|polecat-debug|polecat-docs|polecat-review",
+      "agent": "polecat-auth|polecat-coder|polecat-tests|polecat-debug|polecat-docs|polecat-review",
       "task": "specific single coding task, one sentence",
       "priority": "HIGH|MEDIUM|LOW",
       "file": "relative path e.g. src/auth/jwt.go"
     }
   ]
 }
-Rules: max one task per agent. polecat-debug always gets security/audit task.
-polecat-review always reviews last. Be specific about file paths."""
+Rules:
+- Max one task per agent.
+- polecat-auth: JWT / OAuth / session middleware and auth pages.
+- polecat-coder: core business logic, services, main application code, data models.
+- polecat-debug: always gets OWASP+STRIDE security/audit task.
+- polecat-review: always reviews last — final staff-eng pass of all diffs.
+- Be specific about file paths."""
 
     raw = call_do_inference(system, f"Meeting notes:\n{notes}")
     raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
@@ -386,10 +396,10 @@ Respond ONLY with valid JSON, no markdown fences:
 {
   "convoy": "project name 2-4 words",
   "project_name": "kebab-case-name",
-  "framework": "nextjs|fastapi|express|go-api",
+  "framework": "fastapi",
   "tasks": [
     {
-      "agent": "polecat-auth|polecat-tests|polecat-debug|polecat-docs|polecat-review",
+      "agent": "polecat-auth|polecat-coder|polecat-tests|polecat-debug|polecat-docs|polecat-review",
       "task": "specific single scaffolding task, one sentence",
       "priority": "HIGH|MEDIUM|LOW",
       "file": "relative file path"
@@ -399,14 +409,15 @@ Respond ONLY with valid JSON, no markdown fences:
 Rules:
 - Max one task per agent.
 - ALWAYS use framework: fastapi — pure HTML/CSS/JS served by Python. No React, no TypeScript, no build steps.
-- polecat-auth: writes pages/login.html — full login/register UI with HTML form, CSS, inline JS
-- polecat-debug: writes pages/api.py — Python API routes (additional endpoints)
-- polecat-docs: writes README.md
-- polecat-review: writes pages/dashboard.html — the MAIN dashboard page. Full UI with charts (Chart.js CDN), stats cards, data tables, sidebar. This is what users see first — make it impressive.
-- polecat-tests: writes tests/test_api.py
-- All HTML files use: Tailwind CSS CDN, Chart.js CDN, vanilla JS — NO npm, NO build step
-- main.py must serve all HTML pages and expose REST API endpoints
-- File paths: pages/dashboard.html, pages/login.html, pages/api.py, README.md"""
+- polecat-auth: writes pages/login.html — full login/register UI with HTML form, CSS, inline JS.
+- polecat-coder: writes the core business logic in pages/core.py — main data models, CRUD services, business rules.
+- polecat-debug: writes pages/api.py — additional Python API routes + security hardening.
+- polecat-docs: writes README.md with setup, env vars, deploy steps.
+- polecat-review: writes pages/dashboard.html — MAIN dashboard. Charts (Chart.js CDN), stat cards, data tables, sidebar. First thing users see — make it impressive.
+- polecat-tests: writes tests/test_api.py — pytest tests for all routes.
+- All HTML files use: Tailwind CSS CDN, Chart.js CDN, vanilla JS — NO npm, NO build step.
+- main.py serves all HTML pages and exposes REST API endpoints.
+- File paths: pages/dashboard.html, pages/login.html, pages/core.py, pages/api.py, README.md, tests/test_api.py"""
 
     raw = call_do_inference(system, f"Project description:\n{description}")
     raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
