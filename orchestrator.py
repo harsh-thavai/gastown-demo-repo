@@ -398,19 +398,15 @@ Respond ONLY with valid JSON, no markdown fences:
 }
 Rules:
 - Max one task per agent.
-- PREFERRED frameworks: vite-react (React apps), fastapi (Python apps).
-  Use nextjs ONLY if the user explicitly asks for Next.js.
-- polecat-auth: builds login/register UI with forms (React components or HTML pages)
-- polecat-tests: writes tests
-- polecat-debug: security review
-- polecat-docs: writes README
-- polecat-review: MUST target src/App.jsx for vite-react — the main entry point with FULL UI.
-  Import components from other agents. Include sidebar, stats cards, data table with mock data.
-  This is what users see when they open the app. Make it impressive.
-- For vite-react: polecat-auth → src/components/Login.jsx, polecat-debug → src/utils/api.js,
-  polecat-docs → README.md, polecat-review → src/App.jsx (MANDATORY — full dashboard UI)
-- For fastapi: main.py serves HTML with full UI at root
-- EVERY file must have complete working code — no placeholder text, no empty components"""
+- ALWAYS use framework: fastapi — pure HTML/CSS/JS served by Python. No React, no TypeScript, no build steps.
+- polecat-auth: writes pages/login.html — full login/register UI with HTML form, CSS, inline JS
+- polecat-debug: writes pages/api.py — Python API routes (additional endpoints)
+- polecat-docs: writes README.md
+- polecat-review: writes pages/dashboard.html — the MAIN dashboard page. Full UI with charts (Chart.js CDN), stats cards, data tables, sidebar. This is what users see first — make it impressive.
+- polecat-tests: writes tests/test_api.py
+- All HTML files use: Tailwind CSS CDN, Chart.js CDN, vanilla JS — NO npm, NO build step
+- main.py must serve all HTML pages and expose REST API endpoints
+- File paths: pages/dashboard.html, pages/login.html, pages/api.py, README.md"""
 
     raw = call_do_inference(system, f"Project description:\n{description}")
     raw = re.sub(r"^```[a-z]*\n?", "", raw.strip())
@@ -1187,15 +1183,13 @@ def build_project(description):
          f"Bootstrapping {framework} → {project_dir}")
 
     if not DRY_RUN:
+        # Default to fastapi for all web apps — pure HTML/CSS/JS, no build step
         if framework == "nextjs":
             _bootstrap_nextjs(project_dir, project_name)
         elif framework in ("vite-react", "react"):
-            _bootstrap_vite_react(project_dir, project_name)
-        elif framework == "fastapi":
+            _bootstrap_fastapi(project_dir, project_name)  # downgrade to fastapi
+        else:
             _bootstrap_fastapi(project_dir, project_name)
-        elif framework in ("express", "go-api"):
-            subprocess.run(["npm", "init", "-y"], cwd=project_dir,
-                           capture_output=True, timeout=30)
 
     emit("mayor", "TASK_STARTED",
          f"Bootstrap done — spawning {len(plan['tasks'])} agents")
@@ -1518,12 +1512,31 @@ document.addEventListener('keydown', e => {{
 
 @app.get("/", response_class=HTMLResponse)
 def root():
+    # Serve pages/dashboard.html if agents wrote it, otherwise fallback to calculator
+    import os as _os
+    dashboard = _os.path.join(_os.path.dirname(__file__), "pages", "dashboard.html")
+    if _os.path.exists(dashboard):
+        with open(dashboard) as f:
+            return f.read()
     return HTML
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    import os as _os
+    p = _os.path.join(_os.path.dirname(__file__), "pages", "login.html")
+    if _os.path.exists(p):
+        with open(p) as f:
+            return f.read()
+    return "<h1>Login</h1>"
 
 @app.get("/api/health")
 def health():
     return {{"status": "ok", "project": "{project_name}"}}
 '''
+    # Create pages directory
+    os.makedirs(os.path.join(project_dir, "pages"), exist_ok=True)
+    os.makedirs(os.path.join(project_dir, "tests"), exist_ok=True)
+
     # Write main.py
     full_main = os.path.join(project_dir, "main.py")
     with open(full_main, "w") as f:
