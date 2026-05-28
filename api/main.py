@@ -51,6 +51,7 @@ app.add_middleware(
 
 # ── shared state ──────────────────────────────────────────────────────────────
 events_log: list[dict] = []        # last 200 events
+_event_seq  = 0
 agent_states: dict     = {}
 deploy_url: str        = ""
 convoy_name: str       = ""
@@ -83,7 +84,9 @@ for _a in AGENT_META:
 # ── broadcast ─────────────────────────────────────────────────────────────────
 def _broadcast(event: dict):
     """Fully thread-safe: update state + push to every SSE client queue."""
-    global deploy_url, convoy_name
+    global deploy_url, convoy_name, _event_seq
+    _event_seq += 1
+    event["_seq"] = _event_seq
 
     events_log.append(event)
     if len(events_log) > 200:
@@ -185,6 +188,15 @@ def state():
     }
 
 
+@app.get("/events/recent")
+def events_recent(limit: int = 50, since: int = 0):
+    """Polling fallback — returns last N events as JSON (works through any proxy)."""
+    evs = events_log[-limit:] if limit else events_log[:]
+    if since:
+        evs = [e for e in evs if e.get("_seq", 0) > since]
+    return {"events": evs, "total": len(events_log)}
+
+
 @app.post("/ingest")
 async def ingest(request: Request):
     """Orchestrator posts agent events here."""
@@ -246,11 +258,11 @@ async def events_stream(request: Request):
                     # run_in_executor lets the blocking queue.get() wait in a thread
                     # without ever blocking the asyncio event loop
                     event = await loop.run_in_executor(
-                        None, lambda: q.get(timeout=15.0)
+                        None, lambda: q.get(timeout=5.0)
                     )
                     yield f"data: {json.dumps(event)}\n\n"
                 except sync_queue.Empty:
-                    yield ": heartbeat\n\n"
+                    yield ": heartbeat\n\n"  # every 5s keeps Cloudflare from closing
         finally:
             with _queues_lock:
                 if q in connected_queues:

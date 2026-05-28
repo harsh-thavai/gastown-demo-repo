@@ -715,22 +715,69 @@ const PIPE_NODES = [
   });
 })();
 
-// ── SSE connection ────────────────────────────────────────────────────────────
-let sse=null;
+// ── SSE + polling hybrid ──────────────────────────────────────────────────────
+let sse=null, sseOk=false, sseRetries=0, pollTimer=null, lastSeq=0;
+
+function setConnected(ok){
+  sseOk=ok;
+  document.getElementById('live-indicator').style.display=ok?'flex':'none';
+  document.getElementById('disconnected-indicator').style.display=ok?'none':'flex';
+}
+
 function connectSSE(){
   if(sse){try{sse.close();}catch(_){}}
   sse=new EventSource(`${BRIDGE}/events`);
-  sse.onmessage=e=>{try{handleEvent(JSON.parse(e.data));}catch(_){}};
-  sse.onopen=()=>{
-    document.getElementById('live-indicator').style.display='flex';
-    document.getElementById('disconnected-indicator').style.display='none';
+  sse.onmessage=e=>{
+    try{
+      const d=JSON.parse(e.data);
+      if(d._seq&&d._seq>lastSeq){lastSeq=d._seq;}
+      handleEvent(d);
+    }catch(_){}
   };
+  sse.onopen=()=>{setConnected(true);sseRetries=0;};
   sse.onerror=()=>{
-    document.getElementById('live-indicator').style.display='none';
-    document.getElementById('disconnected-indicator').style.display='flex';
+    setConnected(false);
+    sse.close();
+    // Exponential backoff: 2s, 4s, 8s … cap 30s
+    const delay=Math.min(2000*Math.pow(2,sseRetries),30000);
+    sseRetries++;
+    setTimeout(connectSSE, delay);
   };
 }
+
+// Polling fallback — always runs every 3s, syncs state + catches any missed events
+function startPolling(){
+  if(pollTimer) return;
+  pollTimer=setInterval(async()=>{
+    try{
+      // Sync agent states
+      const st=await fetch(`${BRIDGE}/state`).then(r=>r.json());
+      if(st.convoy&&st.convoy!==document.getElementById('convoy-name').textContent.toLowerCase()){
+        document.getElementById('convoy-name').textContent=st.convoy.toUpperCase();
+      }
+      if(st.deploy_url&&!document.getElementById('vercel-live-link').classList.contains('show')){
+        finishVercelDeploy(st.deploy_url);
+      }
+      // Sync agent cards from state
+      Object.values(st.agents||{}).forEach(a=>{
+        const role=a.role;
+        if(a.status==='working'&&a.last_task) setAgent(role,'working',a.last_task);
+        else if(a.status==='done'&&a.last_task) setAgent(role,'done',a.last_task);
+        else if(a.status==='stuck') setAgent(role,'stuck','Stuck');
+      });
+      setConnected(true);
+
+      // Pull missed events since lastSeq
+      const ev=await fetch(`${BRIDGE}/events/recent?limit=30&since=${lastSeq}`).then(r=>r.json());
+      (ev.events||[]).forEach(e=>{
+        if(e._seq>lastSeq){lastSeq=e._seq; handleEvent(e);}
+      });
+    }catch(_){setConnected(false);}
+  },3000);
+}
+
 connectSSE();
+startPolling();
 
 // ── LLM health check ──────────────────────────────────────────────────────────
 function checkLLM(){
