@@ -9,6 +9,7 @@ Run:  uvicorn api.main:app --host 0.0.0.0 --port 8000
 import asyncio
 import json
 import os
+import queue as sync_queue
 import random
 import time
 import threading
@@ -53,8 +54,9 @@ events_log: list[dict] = []        # last 200 events
 agent_states: dict     = {}
 deploy_url: str        = ""
 convoy_name: str       = ""
-connected_queues: list[asyncio.Queue] = []
-_loop: asyncio.AbstractEventLoop | None = None
+# Use thread-safe queues — avoids asyncio.Queue + call_soon_threadsafe race on Python 3.12
+connected_queues: list[sync_queue.Queue] = []
+_queues_lock = threading.Lock()
 
 AGENT_META = {
     "mayor":          "Orchestrator",
@@ -78,15 +80,9 @@ for _a in AGENT_META:
     }
 
 
-@app.on_event("startup")
-async def _startup():
-    global _loop
-    _loop = asyncio.get_event_loop()
-
-
 # ── broadcast ─────────────────────────────────────────────────────────────────
 def _broadcast(event: dict):
-    """Thread-safe: update state + push to every SSE client queue."""
+    """Fully thread-safe: update state + push to every SSE client queue."""
     global deploy_url, convoy_name
 
     events_log.append(event)
@@ -115,12 +111,14 @@ def _broadcast(event: dict):
     if etype == "DEPLOYMENT_READY":
         deploy_url = event.get("diff", "") or event.get("text", "")
 
-    if _loop and not _loop.is_closed():
-        for q in list(connected_queues):
-            try:
-                _loop.call_soon_threadsafe(q.put_nowait, event)
-            except Exception:
-                pass
+    # threading.Queue.put_nowait is natively thread-safe — no event loop magic needed
+    with _queues_lock:
+        snapshot = list(connected_queues)
+    for q in snapshot:
+        try:
+            q.put_nowait(event)
+        except Exception:
+            pass
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
@@ -233,8 +231,10 @@ async def build_endpoint(request: Request):
 async def events_stream(request: Request):
     """SSE endpoint — browser subscribes here for live agent events."""
     async def generator():
-        queue: asyncio.Queue = asyncio.Queue()
-        connected_queues.append(queue)
+        q: sync_queue.Queue = sync_queue.Queue()
+        with _queues_lock:
+            connected_queues.append(q)
+        loop = asyncio.get_event_loop()
         # Replay last 20 events for late-joiners
         for ev in list(events_log[-20:]):
             yield f"data: {json.dumps(ev)}\n\n"
@@ -243,13 +243,18 @@ async def events_stream(request: Request):
                 if await request.is_disconnected():
                     break
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    # run_in_executor lets the blocking queue.get() wait in a thread
+                    # without ever blocking the asyncio event loop
+                    event = await loop.run_in_executor(
+                        None, lambda: q.get(timeout=15.0)
+                    )
                     yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"   # keep connection alive
+                except sync_queue.Empty:
+                    yield ": heartbeat\n\n"
         finally:
-            if queue in connected_queues:
-                connected_queues.remove(queue)
+            with _queues_lock:
+                if q in connected_queues:
+                    connected_queues.remove(q)
 
     return StreamingResponse(
         generator(),
